@@ -10,6 +10,7 @@ interface FinanceContextType {
   deleteTransaction: (id: string) => void;
   categories: Category[];
   addCategory: (category: Omit<Category, 'id'>) => void;
+  updateCategory: (id: string, category: Omit<Category, 'id'>) => void;
   deleteCategory: (id: string) => void;
   userProfile: UserProfile;
   updateUserProfile: (profile: UserProfile) => void;
@@ -116,6 +117,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setCategories(prev => prev.filter(c => c.id !== id));
   }, []);
 
+  const updateCategory = useCallback((id: string, cat: Omit<Category, 'id'>) => {
+    setCategories(prev => prev.map(c => c.id === id ? { ...cat, id } : c));
+  }, []);
+
   const updateUserProfile = useCallback((profile: UserProfile) => {
     setUserProfile(profile);
   }, []);
@@ -177,7 +182,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     transactions, addTransaction, updateTransaction, deleteTransaction,
     totalBalance, monthlyIncome, monthlyExpense,
     budgets, setCategoryBudget,
-    categories, addCategory, deleteCategory,
+    categories, addCategory, updateCategory, deleteCategory,
     userProfile, updateUserProfile,
     reminders, addReminder, deleteReminder, toggleReminder,
     editingTransactionId, setEditingTransactionId,

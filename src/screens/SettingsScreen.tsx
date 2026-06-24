@@ -7,7 +7,7 @@ import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { Feather } from '@expo/vector-icons';
 import { useFinance } from '../context/FinanceContext';
-import { TransactionType, ParentCategoryType, PARENT_CATEGORIES, COLOR_OPTIONS, CATEGORY_ICONS } from '../types';
+import { TransactionType, ParentCategoryType, Category, PARENT_CATEGORIES, COLOR_OPTIONS, CATEGORY_ICONS } from '../types';
 
 const iconMap: Record<string, keyof typeof Feather.glyphMap> = {
   'credit-card': 'credit-card', monitor: 'monitor', gift: 'gift', coffee: 'coffee',
@@ -21,7 +21,7 @@ const iconMap: Record<string, keyof typeof Feather.glyphMap> = {
 
 export default function SettingsScreen() {
   const {
-    budgets, setCategoryBudget, categories, addCategory, deleteCategory,
+    budgets, setCategoryBudget, categories, addCategory, updateCategory, deleteCategory,
     userProfile, updateUserProfile, getBackupData, importBackup,
     transactions, reminders,
   } = useFinance();
@@ -35,6 +35,7 @@ export default function SettingsScreen() {
   const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
 
   const [isAddingCat, setIsAddingCat] = useState(false);
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [newCatName, setNewCatName] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('credit-card');
   const [newCatColor, setNewCatColor] = useState(COLOR_OPTIONS[0]);
@@ -94,13 +95,38 @@ export default function SettingsScreen() {
 
   const handleCreateCategory = () => {
     if (!newCatName.trim()) return;
-    addCategory({
+    const catData = {
       name: newCatName.trim(), type: catType, icon: newCatIcon,
       color: newCatColor, parentCategoryId: catType === 'expense' ? newCatParent : undefined,
-    });
+    };
+    if (editingCatId) {
+      updateCategory(editingCatId, catData);
+    } else {
+      addCategory(catData);
+    }
     setNewCatName('');
     setIsAddingCat(false);
+    setEditingCatId(null);
     setNewCatParent('essentials');
+  };
+
+  const startEditCategory = (cat: Category) => {
+    setCatType(cat.type);
+    setNewCatName(cat.name);
+    setNewCatIcon(cat.icon);
+    setNewCatColor(cat.color);
+    setNewCatParent((cat.parentCategoryId as ParentCategoryType) || 'essentials');
+    setEditingCatId(cat.id);
+    setIsAddingCat(true);
+  };
+
+  const openAddCategory = () => {
+    setEditingCatId(null);
+    setNewCatName('');
+    setNewCatIcon('credit-card');
+    setNewCatColor(COLOR_OPTIONS[0]);
+    setNewCatParent('essentials');
+    setIsAddingCat(true);
   };
 
   const renderProfileTab = () => (
@@ -225,7 +251,7 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.addCatBtn} onPress={() => { setIsAddingCat(true); setNewCatName(''); }}>
+      <TouchableOpacity style={styles.addCatBtn} onPress={openAddCategory}>
         <Feather name="plus" size={20} color="#6b7280" />
         <Text style={{ color: '#6b7280', fontFamily: 'Vazirmatn_700Bold', fontSize: 14 }}>دسته‌بندی جدید</Text>
       </TouchableOpacity>
@@ -235,16 +261,17 @@ export default function SettingsScreen() {
         const parentName = cat.type === 'expense' ? PARENT_CATEGORIES.find(p => p.id === cat.parentCategoryId)?.name : null;
         return (
           <View key={cat.id} style={styles.catItem}>
-            <View style={styles.catItemLeft}>
+            <TouchableOpacity style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}
+              onPress={() => startEditCategory(cat)}>
               <View style={[styles.catItemIcon, { backgroundColor: cat.color + '26' }]}>
                 <Feather name={iconName} size={22} color={cat.color} />
               </View>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.catItemName}>{cat.name}</Text>
                 {parentName && <Text style={{ fontSize: 11, color: '#9ca3af', fontFamily: 'Vazirmatn_500Medium' }}>دسته اصلی: {parentName}</Text>}
               </View>
-            </View>
-            <TouchableOpacity onPress={() => deleteCategory(cat.id)}>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => deleteCategory(cat.id)} style={{ padding: 8 }}>
               <Feather name="trash-2" size={18} color="#f43f5e" />
             </TouchableOpacity>
           </View>
@@ -327,12 +354,16 @@ export default function SettingsScreen() {
     </View>
   );
 
-  const renderAddCategory = () => (
+  const renderAddCategory = () => {
+    const isEditing = editingCatId !== null;
+    return (
     <Modal visible={isAddingCat} transparent animationType="slide">
       <View style={styles.addCatOverlay}>
         <View style={styles.addCatHeader}>
-          <Text style={{ fontSize: 18, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' }}>ایجاد دسته‌بندی جدید</Text>
-          <TouchableOpacity onPress={() => setIsAddingCat(false)}>
+          <Text style={{ fontSize: 18, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' }}>
+            {isEditing ? 'ویرایش دسته‌بندی' : 'ایجاد دسته‌بندی جدید'}
+          </Text>
+          <TouchableOpacity onPress={() => { setIsAddingCat(false); setEditingCatId(null); }}>
             <Feather name="x" size={24} color="#6b7280" />
           </TouchableOpacity>
         </View>
@@ -387,12 +418,13 @@ export default function SettingsScreen() {
         <View style={styles.addCatFooter}>
           <TouchableOpacity style={[styles.addCatSaveBtn, !newCatName.trim() && { backgroundColor: '#d1d5db' }]}
             onPress={handleCreateCategory} disabled={!newCatName.trim()}>
-            <Text style={{ color: '#fff', fontFamily: 'Vazirmatn_700Bold', fontSize: 16 }}>ذخیره دسته‌بندی</Text>
+            <Text style={{ color: '#fff', fontFamily: 'Vazirmatn_700Bold', fontSize: 16 }}>{editingCatId ? 'بروزرسانی دسته‌بندی' : 'ذخیره دسته‌بندی'}</Text>
           </TouchableOpacity>
         </View>
       </View>
     </Modal>
   );
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f1f5f9' }}>
