@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert,
+  View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert, Modal,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Feather } from '@expo/vector-icons';
 import { useFinance } from '../context/FinanceContext';
 import { TransactionType } from '../types';
-import { parseBankSMS } from '../utils';
+import { parseBankSMS, gregorianToShamsi, shamsiToGregorian, formatShamsiDate, formatGregorianDate, formatDateForInput } from '../utils';
 
 const iconMap: Record<string, keyof typeof Feather.glyphMap> = {
   'credit-card': 'credit-card', monitor: 'monitor', gift: 'gift', coffee: 'coffee',
@@ -18,8 +18,11 @@ interface AddScreenProps {
   onClose: () => void;
 }
 
+const SHAMSI_MONTH_NAMES = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
+
 export default function AddScreen({ onClose }: AddScreenProps) {
-  const { addTransaction, updateTransaction, transactions, editingTransactionId, setEditingTransactionId, categories } = useFinance();
+  const { addTransaction, updateTransaction, transactions, editingTransactionId, setEditingTransactionId, categories, userProfile } = useFinance();
+  const useShamsi = userProfile.useShamsiDate;
 
   const editingTx = editingTransactionId ? transactions.find(t => t.id === editingTransactionId) : null;
 
@@ -31,14 +34,41 @@ export default function AddScreen({ onClose }: AddScreenProps) {
   const [parsedPreview, setParsedPreview] = useState<any>(null);
   const [showSmsArea, setShowSmsArea] = useState(false);
 
+  const initialDate = editingTx ? new Date(editingTx.date) : new Date();
+  const [txDate, setTxDate] = useState<Date>(initialDate);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const dpGregorian = gregorianToShamsi(txDate.getFullYear(), txDate.getMonth() + 1, txDate.getDate());
+  const [dpYear, setDpYear] = useState(dpGregorian.year);
+  const [dpMonth, setDpMonth] = useState(dpGregorian.month);
+  const [dpDay, setDpDay] = useState(dpGregorian.day);
+
+  const formatAmount = (text: string): string => {
+    const cleaned = text.replace(/[^0-9]/g, '');
+    if (!cleaned) return '';
+    return cleaned.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  };
+
+  const handleAmountChange = (text: string) => {
+    const cleaned = text.replace(/[^0-9]/g, '');
+    setAmount(cleaned);
+  };
+
   useEffect(() => {
     if (editingTx) {
       setType(editingTx.type);
       setAmount(String(editingTx.amount));
       setCategoryId(editingTx.categoryId);
       setNote(editingTx.note);
+      setTxDate(new Date(editingTx.date));
     }
   }, [editingTx]);
+
+  useEffect(() => {
+    const s = gregorianToShamsi(txDate.getFullYear(), txDate.getMonth() + 1, txDate.getDate());
+    setDpYear(s.year);
+    setDpMonth(s.month);
+    setDpDay(s.day);
+  }, [txDate]);
 
   const handleClose = () => {
     setEditingTransactionId(null);
@@ -66,13 +96,31 @@ export default function AddScreen({ onClose }: AddScreenProps) {
     const amt = Number(amount);
     if (!amount || isNaN(amt) || !categoryId) return;
 
+    const dateStr = txDate.toISOString();
     if (editingTx) {
-      updateTransaction(editingTx.id, { type, amount: amt, categoryId, note, date: editingTx.date });
+      updateTransaction(editingTx.id, { type, amount: amt, categoryId, note, date: dateStr });
     } else {
-      addTransaction({ type, amount: amt, categoryId, note, date: new Date().toISOString() });
+      addTransaction({ type, amount: amt, categoryId, note, date: dateStr });
     }
     handleClose();
   };
+
+  const openDatePicker = () => {
+    const s = gregorianToShamsi(txDate.getFullYear(), txDate.getMonth() + 1, txDate.getDate());
+    setDpYear(s.year);
+    setDpMonth(s.month);
+    setDpDay(s.day);
+    setShowDatePicker(true);
+  };
+
+  const confirmDate = () => {
+    const newDate = shamsiToGregorian(dpYear, dpMonth, dpDay);
+    setTxDate(newDate);
+    setShowDatePicker(false);
+  };
+
+  const maxDay = dpMonth <= 6 ? 31 : dpMonth === 12 ? 30 : 30;
+  const safeDay = Math.min(dpDay, maxDay);
 
   const filteredCategories = categories.filter(c => c.type === type);
 
@@ -193,9 +241,15 @@ export default function AddScreen({ onClose }: AddScreenProps) {
           <View style={styles.amountSection}>
             <Text style={styles.sectionLabel}>مبلغ (تومان)</Text>
             <TextInput style={[styles.amountInput, { color: type === 'expense' ? '#f43f5e' : '#10b981' }]}
-              value={amount} onChangeText={setAmount} placeholder="0" keyboardType="numeric" autoFocus
+              value={formatAmount(amount)} onChangeText={handleAmountChange} placeholder="0" keyboardType="numeric" autoFocus
               placeholderTextColor="#d1d5db" />
           </View>
+
+          <TouchableOpacity style={styles.dateField} onPress={openDatePicker}>
+            <Feather name="calendar" size={20} color="#6b7280" />
+            <Text style={styles.dateFieldText}>{formatDateForInput(txDate, useShamsi)}</Text>
+            <Feather name="chevron-down" size={16} color="#9ca3af" />
+          </TouchableOpacity>
 
           <View style={styles.categorySection}>
             <Text style={styles.sectionLabel}>دسته‌بندی</Text>
@@ -234,6 +288,55 @@ export default function AddScreen({ onClose }: AddScreenProps) {
           </TouchableOpacity>
         </View>
       </View>
+
+      <Modal visible={showDatePicker} transparent animationType="fade">
+        <View style={styles.dpOverlay}>
+          <View style={styles.dpContainer}>
+            <Text style={styles.dpTitle}>انتخاب تاریخ</Text>
+            <Text style={styles.dpSubtitle}>{useShamsi ? 'شمسی' : 'میلادی'}</Text>
+            <View style={styles.dpRow}>
+              <View style={styles.dpCol}>
+                <TouchableOpacity onPress={() => setDpYear(dpYear + 1)}>
+                  <Feather name="chevron-up" size={24} color="#2563eb" />
+                </TouchableOpacity>
+                <Text style={styles.dpValue}>{dpYear}</Text>
+                <TouchableOpacity onPress={() => setDpYear(Math.max(dpYear - 1, 1300))}>
+                  <Feather name="chevron-down" size={24} color="#2563eb" />
+                </TouchableOpacity>
+                <Text style={styles.dpLabel}>سال</Text>
+              </View>
+              <View style={styles.dpCol}>
+                <TouchableOpacity onPress={() => setDpMonth(dpMonth % 12 + 1)}>
+                  <Feather name="chevron-up" size={24} color="#2563eb" />
+                </TouchableOpacity>
+                <Text style={styles.dpValue}>{SHAMSI_MONTH_NAMES[dpMonth - 1]}</Text>
+                <TouchableOpacity onPress={() => setDpMonth(dpMonth <= 1 ? 12 : dpMonth - 1)}>
+                  <Feather name="chevron-down" size={24} color="#2563eb" />
+                </TouchableOpacity>
+                <Text style={styles.dpLabel}>ماه</Text>
+              </View>
+              <View style={styles.dpCol}>
+                <TouchableOpacity onPress={() => setDpDay(Math.min(dpDay + 1, maxDay))}>
+                  <Feather name="chevron-up" size={24} color="#2563eb" />
+                </TouchableOpacity>
+                <Text style={styles.dpValue}>{String(safeDay).padStart(2, '0')}</Text>
+                <TouchableOpacity onPress={() => setDpDay(Math.max(dpDay - 1, 1))}>
+                  <Feather name="chevron-down" size={24} color="#2563eb" />
+                </TouchableOpacity>
+                <Text style={styles.dpLabel}>روز</Text>
+              </View>
+            </View>
+            <View style={styles.dpActions}>
+              <TouchableOpacity style={styles.dpCancel} onPress={() => setShowDatePicker(false)}>
+                <Text style={styles.dpCancelText}>انصراف</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.dpConfirm} onPress={confirmDate}>
+                <Text style={styles.dpConfirmText}>تایید</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -298,6 +401,23 @@ const styles = StyleSheet.create({
 
   noteSection: { fontFamily: 'Vazirmatn_400Regular', gap: 8},
   noteInput: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff', borderRadius: 16, padding: 16, fontSize: 14, borderWidth: 1, borderColor: '#e5e7eb'},
+
+  dateField: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
+  dateFieldText: { fontFamily: 'Vazirmatn_400Regular', flex: 1, fontSize: 16, color: '#1f2937', textAlign: 'center' },
+
+  dpOverlay: { fontFamily: 'Vazirmatn_400Regular', flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 32 },
+  dpContainer: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '100%', maxWidth: 340, alignItems: 'center' },
+  dpTitle: { fontSize: 18, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937', marginBottom: 4 },
+  dpSubtitle: { fontSize: 11, color: '#9ca3af', fontFamily: 'Vazirmatn_500Medium', marginBottom: 20 },
+  dpRow: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', gap: 24, marginBottom: 24 },
+  dpCol: { fontFamily: 'Vazirmatn_400Regular', alignItems: 'center', gap: 8, minWidth: 80 },
+  dpValue: { fontSize: 20, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937', textAlign: 'center', minHeight: 30 },
+  dpLabel: { fontSize: 11, color: '#9ca3af', fontFamily: 'Vazirmatn_500Medium' },
+  dpActions: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', gap: 16, width: '100%' },
+  dpCancel: { fontFamily: 'Vazirmatn_400Regular', flex: 1, paddingVertical: 14, borderRadius: 16, backgroundColor: '#f3f4f6', alignItems: 'center' },
+  dpCancelText: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#6b7280' },
+  dpConfirm: { fontFamily: 'Vazirmatn_400Regular', flex: 1, paddingVertical: 14, borderRadius: 16, backgroundColor: '#2563eb', alignItems: 'center' },
+  dpConfirmText: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#fff' },
 
   footer: { fontFamily: 'Vazirmatn_400Regular', position: 'absolute', bottom: 0, width: '100%', padding: 24, paddingBottom: 32, backgroundColor: 'transparent'},
   saveBtn: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#2563eb', borderRadius: 24, paddingVertical: 16, alignItems: 'center', shadowColor: '#2563eb', shadowOffset: { width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },

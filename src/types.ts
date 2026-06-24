@@ -43,6 +43,7 @@ export interface UserProfile {
   name: string;
   phone: string;
   email: string;
+  useShamsiDate: boolean;
 }
 
 export interface BackupData {

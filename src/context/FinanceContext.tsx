@@ -39,7 +39,7 @@ const KEYS = {
   profile: '@finance/profile',
 } as const;
 
-const DEFAULT_PROFILE: UserProfile = { name: 'کاربر', phone: '', email: '' };
+const DEFAULT_PROFILE: UserProfile = { name: 'کاربر', phone: '', email: '', useShamsiDate: true };
 const DEFAULT_REMINDER: Reminder = { id: '1', title: 'اجاره خانه', amount: 5000000, dueDate: 1, isActive: true };
 
 function sortByDateDesc(txs: Transaction[]): Transaction[] {

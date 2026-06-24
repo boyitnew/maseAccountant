@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { BarChart } from 'react-native-chart-kit';
 import { useFinance } from '../context/FinanceContext';
-import { formatCurrency, formatMonthYear } from '../utils';
+import { formatCurrency, formatMonthYear, formatMonthYearWithSetting, formatShortMonth } from '../utils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_WIDTH = SCREEN_WIDTH - 24 * 2 - 24 * 2;
@@ -14,7 +14,8 @@ const iconMap: Record<string, keyof typeof Feather.glyphMap> = {
 };
 
 export default function ReportsScreen() {
-  const { transactions, monthlyExpense, categories } = useFinance();
+  const { transactions, monthlyExpense, categories, userProfile } = useFinance();
+  const useShamsi = userProfile.useShamsiDate;
 
   const expenseData = useMemo(() => {
     const now = new Date();
@@ -42,7 +43,7 @@ export default function ReportsScreen() {
       const key = formatMonthYear(d.toISOString());
       if (!last6Keys.includes(key)) {
         last6Keys.unshift(key);
-        monthsData[key] = { name: new Intl.DateTimeFormat('fa-IR', { month: 'short' }).format(d), income: 0, expense: 0 };
+        monthsData[key] = { name: formatShortMonth(d, useShamsi), income: 0, expense: 0 };
       }
     }
     transactions.forEach(t => {

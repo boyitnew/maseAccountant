@@ -157,3 +157,85 @@ export function generateLast14Days(): Date[] {
     return d;
   });
 }
+
+export function gregorianToShamsi(gy: number, gm: number, gd: number): { year: number; month: number; day: number } {
+  const g_days = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+  const days = 355666 + (365 * gy) + Math.floor((gy + 3) / 4) - Math.floor((gy + 99) / 100) + Math.floor((gy + 399) / 400) + gd + g_days[gm - 1];
+  let jy = -1595 + (33 * Math.floor(days / 12053));
+  let rem = days % 12053;
+  jy += 33 * Math.floor(rem / 366);
+  rem %= 366;
+  if (rem >= 366) { jy += Math.floor((rem - 366) / 365); rem = (rem - 366) % 365; }
+  let jm = 1, jd = rem;
+  if (rem < 186) { jm = 1 + Math.floor(rem / 31); jd = rem % 31; }
+  else { rem -= 186; if (rem < 150) { jm = 7 + Math.floor(rem / 30); jd = rem % 30; } else { jm = 12; jd = rem - 150; } }
+  return { year: jy, month: jm, day: jd + 1 };
+}
+
+export function shamsiToGregorian(sy: number, sm: number, sd: number): Date {
+  const gy = sy + 621;
+  let jd = sd - 1;
+  if (sm <= 6) jd += (sm - 1) * 31;
+  else jd += 186 + (sm - 7) * 30;
+  const test = new Date(gy, 2, 21);
+  test.setDate(test.getDate() + jd);
+  const back = gregorianToShamsi(test.getFullYear(), test.getMonth() + 1, test.getDate());
+  if (back.year !== sy) {
+    const adjust = sy < back.year ? -1 : 1;
+    const test2 = new Date(gy + adjust, 2, 21);
+    test2.setDate(test2.getDate() + jd);
+    return test2;
+  }
+  return test;
+}
+
+export function formatDateWithSetting(isoString: string, useShamsi: boolean): string {
+  try {
+    const d = new Date(isoString);
+    if (useShamsi) {
+      return new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: 'long', day: 'numeric' }).format(d);
+    }
+    return new Intl.DateTimeFormat('fa-IR-u-ca-gregory', { year: 'numeric', month: 'long', day: 'numeric' }).format(d);
+  } catch { return isoString; }
+}
+
+export function formatMonthYearWithSetting(isoString: string, useShamsi: boolean): string {
+  try {
+    const d = new Date(isoString);
+    if (useShamsi) {
+      return new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: 'long' }).format(d);
+    }
+    return new Intl.DateTimeFormat('fa-IR-u-ca-gregory', { year: 'numeric', month: 'long' }).format(d);
+  } catch { return isoString; }
+}
+
+export function formatShamsiDate(date: Date): string {
+  const s = gregorianToShamsi(date.getFullYear(), date.getMonth() + 1, date.getDate());
+  return `${s.year}/${String(s.month).padStart(2, '0')}/${String(s.day).padStart(2, '0')}`;
+}
+
+export function formatGregorianDate(date: Date): string {
+  return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+}
+
+export function formatDateForInput(date: Date, useShamsi: boolean): string {
+  return useShamsi ? formatShamsiDate(date) : formatGregorianDate(date);
+}
+
+export function formatShortMonth(date: Date, useShamsi: boolean): string {
+  try {
+    if (useShamsi) {
+      return new Intl.DateTimeFormat('fa-IR', { month: 'short' }).format(date);
+    }
+    return new Intl.DateTimeFormat('fa-IR-u-ca-gregory', { month: 'short' }).format(date);
+  } catch { return ''; }
+}
+
+export function parseDateFromInput(input: string, useShamsi: boolean): Date | null {
+  const parts = input.split('/');
+  if (parts.length !== 3) return null;
+  const [y, m, d] = parts.map(p => parseInt(p, 10));
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return null;
+  if (useShamsi) return shamsiToGregorian(y, m, d);
+  return new Date(y, m - 1, d);
+}
