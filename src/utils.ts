@@ -12,19 +12,21 @@ export function formatCurrency(amount: number, omitSuffix?: boolean): string {
   return (isNegative ? '\u202A-\u202C' : '') + formatted + (omitSuffix ? '' : ' تومان');
 }
 
+export const SHAMSI_MONTH_NAMES = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
+
 export function formatDate(isoString: string): string {
   try {
-    return new Intl.DateTimeFormat('fa-IR', {
-      year: 'numeric', month: 'long', day: 'numeric'
-    }).format(new Date(isoString));
+    const d = new Date(isoString);
+    const s = gregorianToShamsi(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    return `${s.day} ${SHAMSI_MONTH_NAMES[s.month - 1]} ${s.year}`;
   } catch { return isoString; }
 }
 
 export function formatMonthYear(isoString: string): string {
   try {
-    return new Intl.DateTimeFormat('fa-IR', {
-      year: 'numeric', month: 'long'
-    }).format(new Date(isoString));
+    const d = new Date(isoString);
+    const s = gregorianToShamsi(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    return `${SHAMSI_MONTH_NAMES[s.month - 1]} ${s.year}`;
   } catch { return isoString; }
 }
 
@@ -135,9 +137,10 @@ export function parseBankSMS(text: string): ParsedSMS | null {
 export function getPersianDate(date: Date = new Date()): { dayName: string; dayNum: string; month: string; full: string } {
   try {
     const dayName = new Intl.DateTimeFormat('fa-IR', { weekday: 'short' }).format(date);
-    const dayNum = new Intl.DateTimeFormat('fa-IR', { day: 'numeric' }).format(date);
-    const month = new Intl.DateTimeFormat('fa-IR', { month: 'long' }).format(date);
-    const full = new Intl.DateTimeFormat('fa-IR', { dateStyle: 'long' }).format(date);
+    const s = gregorianToShamsi(date.getFullYear(), date.getMonth() + 1, date.getDate());
+    const dayNum = s.day.toLocaleString('fa-IR');
+    const month = SHAMSI_MONTH_NAMES[s.month - 1];
+    const full = `${s.day} ${month} ${s.year}`;
     return { dayName, dayNum, month, full };
   } catch {
     return { dayName: '', dayNum: String(date.getDate()), month: '', full: '' };
@@ -189,53 +192,22 @@ export function shamsiToGregorian(sy: number, sm: number, sd: number): Date {
   return test;
 }
 
-export function formatDateWithSetting(isoString: string, useShamsi: boolean): string {
-  try {
-    const d = new Date(isoString);
-    if (useShamsi) {
-      return new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: 'long', day: 'numeric' }).format(d);
-    }
-    return new Intl.DateTimeFormat('fa-IR-u-ca-gregory', { year: 'numeric', month: 'long', day: 'numeric' }).format(d);
-  } catch { return isoString; }
-}
-
-export function formatMonthYearWithSetting(isoString: string, useShamsi: boolean): string {
-  try {
-    const d = new Date(isoString);
-    if (useShamsi) {
-      return new Intl.DateTimeFormat('fa-IR', { year: 'numeric', month: 'long' }).format(d);
-    }
-    return new Intl.DateTimeFormat('fa-IR-u-ca-gregory', { year: 'numeric', month: 'long' }).format(d);
-  } catch { return isoString; }
-}
-
 export function formatShamsiDate(date: Date): string {
   const s = gregorianToShamsi(date.getFullYear(), date.getMonth() + 1, date.getDate());
   return `${s.year}/${String(s.month).padStart(2, '0')}/${String(s.day).padStart(2, '0')}`;
 }
 
-export function formatGregorianDate(date: Date): string {
-  return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
-}
-
-export function formatDateForInput(date: Date, useShamsi: boolean): string {
-  return useShamsi ? formatShamsiDate(date) : formatGregorianDate(date);
-}
-
-export function formatShortMonth(date: Date, useShamsi: boolean): string {
+export function formatShortMonth(date: Date): string {
   try {
-    if (useShamsi) {
-      return new Intl.DateTimeFormat('fa-IR', { month: 'short' }).format(date);
-    }
-    return new Intl.DateTimeFormat('fa-IR-u-ca-gregory', { month: 'short' }).format(date);
+    const s = gregorianToShamsi(date.getFullYear(), date.getMonth() + 1, date.getDate());
+    return s.month <= 6 ? `${s.month} ماهه` : SHAMSI_MONTH_NAMES[s.month - 1].substring(0, 4);
   } catch { return ''; }
 }
 
-export function parseDateFromInput(input: string, useShamsi: boolean): Date | null {
+export function parseDateFromInput(input: string): Date | null {
   const parts = input.split('/');
   if (parts.length !== 3) return null;
   const [y, m, d] = parts.map(p => parseInt(p, 10));
   if (isNaN(y) || isNaN(m) || isNaN(d)) return null;
-  if (useShamsi) return shamsiToGregorian(y, m, d);
-  return new Date(y, m - 1, d);
+  return shamsiToGregorian(y, m, d);
 }

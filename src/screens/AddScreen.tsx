@@ -6,7 +6,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Feather } from '@expo/vector-icons';
 import { useFinance } from '../context/FinanceContext';
 import { TransactionType } from '../types';
-import { parseBankSMS, gregorianToShamsi, shamsiToGregorian, formatShamsiDate, formatGregorianDate, formatDateForInput } from '../utils';
+import { parseBankSMS, gregorianToShamsi, shamsiToGregorian, formatShamsiDate, SHAMSI_MONTH_NAMES } from '../utils';
 
 const iconMap: Record<string, keyof typeof Feather.glyphMap> = {
   'credit-card': 'credit-card', monitor: 'monitor', gift: 'gift', coffee: 'coffee',
@@ -18,11 +18,8 @@ interface AddScreenProps {
   onClose: () => void;
 }
 
-const SHAMSI_MONTH_NAMES = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
-
 export default function AddScreen({ onClose }: AddScreenProps) {
-  const { addTransaction, updateTransaction, transactions, editingTransactionId, setEditingTransactionId, categories, userProfile } = useFinance();
-  const useShamsi = userProfile.useShamsiDate;
+  const { addTransaction, updateTransaction, transactions, editingTransactionId, setEditingTransactionId, categories } = useFinance();
 
   const editingTx = editingTransactionId ? transactions.find(t => t.id === editingTransactionId) : null;
 
@@ -247,7 +244,7 @@ export default function AddScreen({ onClose }: AddScreenProps) {
 
           <TouchableOpacity style={styles.dateField} onPress={openDatePicker}>
             <Feather name="calendar" size={20} color="#6b7280" />
-            <Text style={styles.dateFieldText}>{formatDateForInput(txDate, useShamsi)}</Text>
+            <Text style={styles.dateFieldText}>{formatShamsiDate(txDate)}</Text>
             <Feather name="chevron-down" size={16} color="#9ca3af" />
           </TouchableOpacity>
 
@@ -293,7 +290,7 @@ export default function AddScreen({ onClose }: AddScreenProps) {
         <View style={styles.dpOverlay}>
           <View style={styles.dpContainer}>
             <Text style={styles.dpTitle}>انتخاب تاریخ</Text>
-            <Text style={styles.dpSubtitle}>{useShamsi ? 'شمسی' : 'میلادی'}</Text>
+            <Text style={styles.dpSubtitle}>شمسی</Text>
             <View style={styles.dpRow}>
               <View style={styles.dpCol}>
                 <TouchableOpacity onPress={() => setDpYear(dpYear + 1)}>

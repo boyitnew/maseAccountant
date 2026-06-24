@@ -124,23 +124,6 @@ export default function SettingsScreen() {
         <TextInput style={[styles.fieldInput, { textAlign: 'left' }]} value={tempProfile.email}
           onChangeText={t => setTempProfile({ ...tempProfile, email: t })} placeholder="user@example.com" keyboardType="email-address" />
       </View>
-      <View style={styles.datePrefSection}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <View style={styles.datePrefIcon}>
-            <Feather name="calendar" size={20} color="#2563eb" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.datePrefLabel}>نوع تاریخ</Text>
-            <Text style={styles.datePrefDesc}>{tempProfile.useShamsiDate ? 'شمسی (پیش‌فرض)' : 'میلادی (پیش‌فرض)'}</Text>
-          </View>
-          <TouchableOpacity style={[styles.dateToggleBtn, tempProfile.useShamsiDate && styles.dateToggleActive]}
-            onPress={() => setTempProfile({ ...tempProfile, useShamsiDate: !tempProfile.useShamsiDate })}>
-            <Text style={[styles.dateToggleText, tempProfile.useShamsiDate && styles.dateToggleTextActive]}>
-              {tempProfile.useShamsiDate ? 'شمسی' : 'میلادی'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
       <TouchableOpacity style={styles.saveProfileBtn} onPress={handleSaveProfile}>
         <Text style={styles.saveProfileBtnText}>ذخیره تغییرات پروفایل</Text>
       </TouchableOpacity>
@@ -490,14 +473,6 @@ const styles = StyleSheet.create({
   importStatusDot: { fontFamily: 'Vazirmatn_400Regular', width: 20, height: 20, borderRadius: 10, marginTop: 2},
   importStatusTitle: { fontFamily: 'Vazirmatn_700Bold', fontSize: 12 },
 
-  datePrefSection: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
-  datePrefIcon: { fontFamily: 'Vazirmatn_400Regular', width: 40, height: 40, borderRadius: 12, backgroundColor: '#eff6ff', alignItems: 'center', justifyContent: 'center' },
-  datePrefLabel: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
-  datePrefDesc: { fontSize: 11, color: '#9ca3af', fontFamily: 'Vazirmatn_500Medium', marginTop: 2 },
-  dateToggleBtn: { fontFamily: 'Vazirmatn_400Regular', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
-  dateToggleActive: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  dateToggleText: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#6b7280' },
-  dateToggleTextActive: { fontFamily: 'Vazirmatn_400Regular', color: '#fff' },
   addCatOverlay: { fontFamily: 'Vazirmatn_400Regular', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff', zIndex: 100},
   addCatHeader: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 48, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6'},
   parentSelect: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 16, borderWidth: 2, borderColor: '#f3f4f6', backgroundColor: '#f9fafb'},

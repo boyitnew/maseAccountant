@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFinance } from '../context/FinanceContext';
-import { formatCurrency, formatDate, formatDateWithSetting, getPersianDate, isSameDay, generateLast14Days } from '../utils';
+import { formatCurrency, formatDate, getPersianDate, isSameDay, generateLast14Days } from '../utils';
 import { PARENT_CATEGORIES } from '../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -94,10 +94,7 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
   }, [selectedDate, transactions]);
 
   const isToday = isSameDay(selectedDate, new Date());
-  const useShamsi = userProfile.useShamsiDate;
-  const selectedDateFull = selectedDate
-    ? (useShamsi ? getPersianDate(selectedDate).full : formatDateWithSetting(selectedDate.toISOString(), false))
-    : '';
+  const selectedDateFull = selectedDate ? getPersianDate(selectedDate).full : '';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -236,7 +233,7 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
                   </View>
                   <View style={styles.txInfo}>
                     <Text style={styles.txName} numberOfLines={1}>{tx.note || cat?.name}</Text>
-                    <Text style={styles.txDate}>{formatDateWithSetting(tx.date, useShamsi)}</Text>
+                    <Text style={styles.txDate}>{formatDate(tx.date)}</Text>
                   </View>
                   <Text style={[styles.txAmount, isInc && { color: '#10b981' }]}>
                     {isInc ? '+' : '-'}{formatCurrency(tx.amount, true)}
