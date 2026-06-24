@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert,
+  View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert, Modal,
 } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -327,8 +327,8 @@ export default function SettingsScreen() {
     </View>
   );
 
-  if (isAddingCat) {
-    return (
+  const renderAddCategory = () => (
+    <Modal visible={isAddingCat} transparent animationType="slide">
       <View style={styles.addCatOverlay}>
         <View style={styles.addCatHeader}>
           <Text style={{ fontSize: 18, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' }}>ایجاد دسته‌بندی جدید</Text>
@@ -391,8 +391,8 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
       </View>
-    );
-  }
+    </Modal>
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f1f5f9' }}>
@@ -416,6 +416,7 @@ export default function SettingsScreen() {
         {activeTab === 'categories' && renderCategoriesTab()}
         {activeTab === 'backup' && renderBackupTab()}
       </ScrollView>
+      {renderAddCategory()}
     </View>
   );
 }
@@ -473,7 +474,7 @@ const styles = StyleSheet.create({
   importStatusDot: { fontFamily: 'Vazirmatn_400Regular', width: 20, height: 20, borderRadius: 10, marginTop: 2},
   importStatusTitle: { fontFamily: 'Vazirmatn_700Bold', fontSize: 12 },
 
-  addCatOverlay: { fontFamily: 'Vazirmatn_400Regular', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff', zIndex: 100},
+  addCatOverlay: { fontFamily: 'Vazirmatn_400Regular', flex: 1, backgroundColor: '#fff'},
   addCatHeader: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 48, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6'},
   parentSelect: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 16, borderWidth: 2, borderColor: '#f3f4f6', backgroundColor: '#f9fafb'},
   parentSelectActive: { fontFamily: 'Vazirmatn_400Regular', borderColor: '#3b82f6', backgroundColor: 'rgba(239,246,255,0.5)'},
