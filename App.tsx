@@ -31,11 +31,8 @@ type ViewName = 'home' | 'accounts' | 'reports' | 'add' | 'settings' | 'reminder
 function AppContent() {
   const [currentView, setCurrentView] = useState<ViewName>('home');
   const { isLoaded, appLock } = useFinance();
-  const [isUnlocked, setIsUnlocked] = useState(false);
-
-  useEffect(() => {
-    if (isLoaded && !appLock.enabled) setIsUnlocked(true);
-  }, [isLoaded, appLock.enabled]);
+  const [userUnlocked, setUserUnlocked] = useState(false);
+  const isUnlocked = !appLock.enabled || userUnlocked;
 
   if (!isLoaded) {
     return (
@@ -47,7 +44,7 @@ function AppContent() {
   }
 
   if (!isUnlocked) {
-    return <LockScreen onUnlock={() => setIsUnlocked(true)} />;
+    return <LockScreen onUnlock={() => setUserUnlocked(true)} />;
   }
 
   return (

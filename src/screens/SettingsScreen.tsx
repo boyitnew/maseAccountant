@@ -11,7 +11,9 @@ import {
   TransactionType, ParentCategoryType, Category, PARENT_CATEGORIES, COLOR_OPTIONS, CATEGORY_ICONS,
   GOAL_ICONS, DEBT_ICONS,
 } from '../types';
-import { formatCurrency, calculateGoalProgress, generateId, getShamsiNow, SHAMSI_MONTH_NAMES, formatShamsiDateParts } from '../utils';
+import { formatCurrency, calculateGoalProgress, generateId, getShamsiNow, SHAMSI_MONTH_NAMES, formatShamsiDateParts, gregorianToShamsi } from '../utils';
+import CurrencyInput from '../components/CurrencyInput';
+import ShamsiDatePicker from '../components/ShamsiDatePicker';
 
 const iconMap: Record<string, any> = {
   'credit-card': 'credit-card', monitor: 'monitor', gift: 'gift', coffee: 'coffee',
@@ -73,6 +75,8 @@ export default function SettingsScreen() {
   const [debtDueYear, setDebtDueYear] = useState('');
   const [debtDueDay, setDebtDueDay] = useState('');
   const [payDebtAmount, setPayDebtAmount] = useState('');
+  const [showDebtDatePicker, setShowDebtDatePicker] = useState(false);
+  const [debtDueDate, setDebtDueDate] = useState(new Date());
 
   const expenseCategories = categories.filter(c => c.type === 'expense');
 
@@ -413,9 +417,9 @@ export default function SettingsScreen() {
               </View>
               {g.currentAmount < g.targetAmount && (
                 <View style={styles.contributeRow}>
-                  <TextInput style={styles.contributeInput}
-                    value={contributeAmount} onChangeText={t => setContributeAmount(t.replace(/\D/g, ''))}
-                    placeholder="مبلغ" keyboardType="numeric" />
+                  <CurrencyInput value={contributeAmount} onChangeAmount={setContributeAmount}
+                    placeholder="مبلغ" containerStyle={{ marginBottom: 0, flex: 1 }} suffixStyle={{ display: 'none' }}
+                    inputStyle={{ fontSize: 14 }} />
                   <TouchableOpacity style={styles.contributeBtn} onPress={() => {
                     const amt = Number(contributeAmount);
                     if (amt > 0) { contributeToGoal(g.id, amt); setContributeAmount(''); }
@@ -445,9 +449,8 @@ export default function SettingsScreen() {
               <Text style={styles.fieldLabel}>نام هدف</Text>
               <TextInput style={styles.fieldInput} value={goalName} onChangeText={setGoalName} placeholder="مثال: خرید ماشین" />
 
-              <Text style={styles.fieldLabel}>مبلغ هدف (تومان)</Text>
-              <TextInput style={styles.fieldInput} value={goalTarget} onChangeText={t => setGoalTarget(t.replace(/\D/g, ''))}
-                placeholder="10000000" keyboardType="numeric" />
+              <CurrencyInput value={goalTarget} onChangeAmount={setGoalTarget} label="مبلغ هدف (تومان)"
+                placeholder="10000000" />
 
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1 }}>
@@ -537,9 +540,9 @@ export default function SettingsScreen() {
             )}
             {!d.isPaid && (
               <View style={styles.payRow}>
-                <TextInput style={styles.payInput} value={payDebtAmount}
-                  onChangeText={t => setPayDebtAmount(t.replace(/\D/g, ''))}
-                  placeholder="مبلغ پرداخت" keyboardType="numeric" />
+                <CurrencyInput value={payDebtAmount} onChangeAmount={setPayDebtAmount}
+                  placeholder="مبلغ پرداخت" containerStyle={{ marginBottom: 0, flex: 1 }} suffixStyle={{ display: 'none' }}
+                  inputStyle={{ fontSize: 14 }} />
                 <TouchableOpacity style={styles.payBtn} onPress={() => {
                   const amt = Number(payDebtAmount);
                   if (amt > 0) { payDebt(d.id, amt); setPayDebtAmount(''); }
@@ -583,30 +586,34 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.fieldLabel}>مبلغ (تومان)</Text>
-              <TextInput style={styles.fieldInput} value={debtAmount}
-                onChangeText={t => setDebtAmount(t.replace(/\D/g, ''))}
-                placeholder="1000000" keyboardType="numeric" />
+              <CurrencyInput value={debtAmount} onChangeAmount={setDebtAmount} label="مبلغ (تومان)"
+                placeholder="1000000" />
 
               <Text style={styles.fieldLabel}>توضیحات (اختیاری)</Text>
               <TextInput style={styles.fieldInput} value={debtDesc} onChangeText={setDebtDesc}
                 placeholder="مثال: قرض برای تعمیر ماشین" />
 
-              <Text style={styles.fieldLabel}>سررسید (اختیاری - شمسی)</Text>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <View style={{ flex: 1 }}>
-                  <TextInput style={styles.fieldInput} value={debtDueYear} onChangeText={t => setDebtDueYear(t.replace(/\D/g, ''))}
-                    placeholder="سال" keyboardType="numeric" maxLength={4} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <TextInput style={styles.fieldInput} value={debtDueMonth} onChangeText={t => setDebtDueMonth(t.replace(/\D/g, ''))}
-                    placeholder="ماه" keyboardType="numeric" maxLength={2} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <TextInput style={styles.fieldInput} value={debtDueDay} onChangeText={t => setDebtDueDay(t.replace(/\D/g, ''))}
-                    placeholder="روز" keyboardType="numeric" maxLength={2} />
-                </View>
-              </View>
+              <Text style={styles.fieldLabel}>سررسید (اختیاری)</Text>
+              <TouchableOpacity style={styles.fieldInput} onPress={() => setShowDebtDatePicker(true)}>
+                <Text style={{ fontFamily: 'Vazirmatn_500Medium', fontSize: 14, color: (debtDueYear || debtDueMonth || debtDueDay) ? '#1f2937' : '#9ca3af' }}>
+                  {debtDueYear && debtDueMonth && debtDueDay
+                    ? `${debtDueYear}/${String(debtDueMonth).padStart(2, '0')}/${String(debtDueDay).padStart(2, '0')}`
+                    : 'انتخاب تاریخ سررسید'}
+                </Text>
+              </TouchableOpacity>
+              <ShamsiDatePicker visible={showDebtDatePicker} date={debtDueDate}
+                onConfirm={(d) => {
+                  const gy = d.getFullYear();
+                  const gm = d.getMonth() + 1;
+                  const gd = d.getDate();
+                  const input = gregorianToShamsi(gy, gm, gd);
+                  setDebtDueYear(String(input.year));
+                  setDebtDueMonth(String(input.month));
+                  setDebtDueDay(String(input.day));
+                  setDebtDueDate(d);
+                  setShowDebtDatePicker(false);
+                }}
+                onCancel={() => setShowDebtDatePicker(false)} />
             </ScrollView>
             <View style={styles.modalFooter}>
               <TouchableOpacity style={styles.saveBtn} onPress={handleDebtSave}>

@@ -20,7 +20,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
 
   useEffect(() => {
     initLock();
-  }, []);
+  }, [appLock]);
 
   useEffect(() => {
     if (error) {
