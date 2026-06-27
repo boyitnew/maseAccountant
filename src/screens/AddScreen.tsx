@@ -8,10 +8,10 @@ import { useFinance } from '../context/FinanceContext';
 import { TransactionType } from '../types';
 import { parseBankSMS, gregorianToShamsi, shamsiToGregorian, formatShamsiDate, SHAMSI_MONTH_NAMES } from '../utils';
 
-const iconMap: Record<string, keyof typeof Feather.glyphMap> = {
+const iconMap: Record<string, any> = {
   'credit-card': 'credit-card', monitor: 'monitor', gift: 'gift', coffee: 'coffee',
   truck: 'truck', 'shopping-bag': 'shopping-bag', home: 'home', 'file-text': 'file-text',
-  film: 'film', activity: 'activity', zap: 'zap', bus: 'bus', plane: 'plane',
+  film: 'film', activity: 'activity', zap: 'zap',
 };
 
 interface AddScreenProps {
@@ -19,7 +19,7 @@ interface AddScreenProps {
 }
 
 export default function AddScreen({ onClose }: AddScreenProps) {
-  const { addTransaction, updateTransaction, transactions, editingTransactionId, setEditingTransactionId, categories } = useFinance();
+  const { addTransaction, updateTransaction, transactions, editingTransactionId, setEditingTransactionId, categories, accounts, addRecurring } = useFinance();
 
   const editingTx = editingTransactionId ? transactions.find(t => t.id === editingTransactionId) : null;
 
@@ -27,9 +27,13 @@ export default function AddScreen({ onClose }: AddScreenProps) {
   const [amount, setAmount] = useState<string>(editingTx ? String(editingTx.amount) : '');
   const [categoryId, setCategoryId] = useState<string>(editingTx?.categoryId || '');
   const [note, setNote] = useState<string>(editingTx?.note || '');
+  const [accountId, setAccountId] = useState<string>(editingTx?.accountId || (accounts.length > 0 ? accounts[0].id : ''));
   const [smsText, setSmsText] = useState('');
   const [parsedPreview, setParsedPreview] = useState<any>(null);
   const [showSmsArea, setShowSmsArea] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
+  const [intervalValue, setIntervalValue] = useState('1');
 
   const initialDate = editingTx ? new Date(editingTx.date) : new Date();
   const [txDate, setTxDate] = useState<Date>(initialDate);
@@ -57,6 +61,7 @@ export default function AddScreen({ onClose }: AddScreenProps) {
       setCategoryId(editingTx.categoryId);
       setNote(editingTx.note);
       setTxDate(new Date(editingTx.date));
+      if (editingTx.accountId) setAccountId(editingTx.accountId);
     }
   }, [editingTx]);
 
@@ -94,10 +99,21 @@ export default function AddScreen({ onClose }: AddScreenProps) {
     if (!amount || isNaN(amt) || !categoryId) return;
 
     const dateStr = txDate.toISOString();
-    if (editingTx) {
-      updateTransaction(editingTx.id, { type, amount: amt, categoryId, note, date: dateStr });
+    const txData = { type, amount: amt, categoryId, note, date: dateStr, accountId };
+
+    if (isRecurring && !editingTx) {
+      addRecurring({
+        amount: amt, type, categoryId, note,
+        accountId,
+        frequency,
+        intervalValue: Number(intervalValue) || 1,
+        startDate: dateStr,
+        isActive: true,
+      });
+    } else if (editingTx) {
+      updateTransaction(editingTx.id, txData);
     } else {
-      addTransaction({ type, amount: amt, categoryId, note, date: dateStr });
+      addTransaction(txData);
     }
     handleClose();
   };
@@ -154,15 +170,13 @@ export default function AddScreen({ onClose }: AddScreenProps) {
                   <Text style={styles.smsTitle}>پردازشگر خودکار پیامک بانکی</Text>
                 </View>
                 <TouchableOpacity onPress={() => setShowSmsArea(!showSmsArea)}>
-                  <Text style={styles.smsToggle}>{showSmsArea ? 'بستن پیامک‌خوان' : 'وارد کردن پیامک'}</Text>
+                  <Text style={styles.smsToggle}>{showSmsArea ? 'بستن' : 'باز کردن'}</Text>
                 </TouchableOpacity>
               </View>
 
               {showSmsArea && (
                 <View style={styles.smsBody}>
-                  <Text style={styles.smsDesc}>
-                    متن پیامک واریز یا برداشت بانک خود را در کادر زیر کپی کنید:
-                  </Text>
+                  <Text style={styles.smsDesc}>متن پیامک واریز یا برداشت بانک خود را در کادر زیر کپی کنید:</Text>
                   <View style={styles.smsInputRow}>
                     <TextInput style={styles.smsInput} multiline numberOfLines={3}
                       value={smsText} onChangeText={t => { setSmsText(t); setParsedPreview(parseBankSMS(t)); }}
@@ -188,12 +202,12 @@ export default function AddScreen({ onClose }: AddScreenProps) {
                       </View>
                       <View style={styles.parsedDetails}>
                         <View>
-                          <Text style={styles.parsedLabel}>مبلغ تراکنش:</Text>
+                          <Text style={styles.parsedLabel}>مبلغ:</Text>
                           <Text style={styles.parsedValue}>{Number(parsedPreview.amount).toLocaleString('fa-IR')} تومان</Text>
                         </View>
                         {parsedPreview.cardSuffix ? (
                           <View>
-                            <Text style={styles.parsedLabel}>کارت/حساب:</Text>
+                            <Text style={styles.parsedLabel}>کارت:</Text>
                             <Text style={styles.parsedValue}>**** {parsedPreview.cardSuffix}</Text>
                           </View>
                         ) : null}
@@ -221,17 +235,6 @@ export default function AddScreen({ onClose }: AddScreenProps) {
                   )}
                 </View>
               )}
-
-              {!showSmsArea && (
-                <View style={styles.smsCollapsed}>
-                  <Text style={styles.smsCollapsedText}>
-                    می‌توانید پیامک بانکی را کپی کرده و اینجا وارد کنید تا در ۲ ثانیه فرم پر شود!
-                  </Text>
-                  <TouchableOpacity style={styles.openBtn} onPress={() => setShowSmsArea(true)}>
-                    <Text style={styles.openBtnText}>باز کردن</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
             </View>
           )}
 
@@ -241,6 +244,20 @@ export default function AddScreen({ onClose }: AddScreenProps) {
               value={formatAmount(amount)} onChangeText={handleAmountChange} placeholder="0" keyboardType="numeric" autoFocus
               placeholderTextColor="#d1d5db" />
           </View>
+
+          {accounts.length > 1 && (
+            <View style={styles.accountSection}>
+              <Text style={styles.sectionLabel}>حساب</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.accountList}>
+                {accounts.map(acct => (
+                  <TouchableOpacity key={acct.id} style={[styles.accountChip, accountId === acct.id && { backgroundColor: acct.color + '20', borderColor: acct.color }]}
+                    onPress={() => setAccountId(acct.id)}>
+                    <Text style={[styles.accountChipText, accountId === acct.id && { color: acct.color }]}>{acct.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
           <TouchableOpacity style={styles.dateField} onPress={openDatePicker}>
             <Feather name="calendar" size={20} color="#6b7280" />
@@ -273,15 +290,50 @@ export default function AddScreen({ onClose }: AddScreenProps) {
 
           <View style={styles.noteSection}>
             <Text style={styles.sectionLabel}>توضیحات (اختیاری)</Text>
-            <TextInput style={styles.noteInput} value={note} onChangeText={setNote}
-              placeholder="مثلاً: خرید از فروشگاه رفاه..." />
+            <TextInput style={styles.noteInput} value={note} onChangeText={setNote} placeholder="مثلاً: خرید از فروشگاه رفاه..." />
           </View>
+
+          {!editingTx && (
+            <View style={styles.recurringSection}>
+              <TouchableOpacity style={styles.recurringToggle} onPress={() => setIsRecurring(!isRecurring)}>
+                <View style={[styles.checkbox, isRecurring && styles.checkboxActive]}>
+                  {isRecurring && <Feather name="check" size={14} color="#fff" />}
+                </View>
+                <Text style={styles.recurringLabel}>تراکنش دوره‌ای (مکرر)</Text>
+              </TouchableOpacity>
+
+              {isRecurring && (
+                <View style={styles.recurringOptions}>
+                  <View style={styles.freqRow}>
+                    {(['daily', 'weekly', 'monthly', 'yearly'] as const).map(f => (
+                      <TouchableOpacity key={f} style={[styles.freqBtn, frequency === f && styles.freqBtnActive]}
+                        onPress={() => setFrequency(f)}>
+                        <Text style={[styles.freqBtnText, frequency === f && styles.freqBtnTextActive]}>
+                          {f === 'daily' ? 'روزانه' : f === 'weekly' ? 'هفتگی' : f === 'monthly' ? 'ماهانه' : 'سالیانه'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <View style={styles.intervalRow}>
+                    <Text style={styles.intervalLabel}>هر</Text>
+                    <TextInput style={styles.intervalInput} value={intervalValue}
+                      onChangeText={t => setIntervalValue(t.replace(/\D/g, ''))} keyboardType="numeric" />
+                    <Text style={styles.intervalLabel}>
+                      {frequency === 'daily' ? 'روز' : frequency === 'weekly' ? 'هفته' : frequency === 'monthly' ? 'ماه' : 'سال'} یکبار
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
         </ScrollView>
 
         <View style={styles.footer}>
           <TouchableOpacity style={[styles.saveBtn, (!amount || !categoryId) && styles.saveBtnDisabled]}
             onPress={handleSave} disabled={!amount || !categoryId} activeOpacity={0.9}>
-            <Text style={styles.saveBtnText}>{editingTx ? 'ذخیره تغییرات' : 'ثبت تراکنش'}</Text>
+            <Text style={styles.saveBtnText}>
+              {editingTx ? 'ذخیره تغییرات' : isRecurring ? 'ثبت تراکنش مکرر' : 'ثبت تراکنش'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -339,85 +391,100 @@ export default function AddScreen({ onClose }: AddScreenProps) {
 }
 
 const styles = StyleSheet.create({
-  overlay: { fontFamily: 'Vazirmatn_400Regular', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#f8fafc', zIndex: 100},
-  container: { fontFamily: 'Vazirmatn_400Regular', flex: 1},
-  header: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 48, paddingBottom: 16, backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  backBtn: { fontFamily: 'Vazirmatn_400Regular', padding: 8},
+  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#f8fafc', zIndex: 100},
+  container: { flex: 1},
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 48, paddingBottom: 16, backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  backBtn: { padding: 8},
   headerTitle: { fontSize: 18, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
-  body: { fontFamily: 'Vazirmatn_400Regular', flex: 1},
-  bodyContent: { fontFamily: 'Vazirmatn_400Regular', padding: 24, paddingBottom: 120, gap: 32},
+  body: { flex: 1},
+  bodyContent: { padding: 24, paddingBottom: 120, gap: 32},
 
-  typeToggle: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', backgroundColor: '#f3f4f6', borderRadius: 16, padding: 6},
-  typeBtn: { fontFamily: 'Vazirmatn_400Regular', flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center'},
-  typeBtnActiveExpense: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff'},
-  typeBtnActiveIncome: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff'},
+  typeToggle: { flexDirection: 'row', backgroundColor: '#f3f4f6', borderRadius: 16, padding: 6},
+  typeBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center'},
+  typeBtnActiveExpense: { backgroundColor: '#fff'},
+  typeBtnActiveIncome: { backgroundColor: '#fff'},
   typeBtnText: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#6b7280' },
 
-  smsWidget: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff', borderRadius: 24, padding: 20, borderWidth: 1, borderColor: '#f3f4f6'},
-  smsHeader: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
-  smsHeaderLeft: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 8},
-  smsIconBox: { fontFamily: 'Vazirmatn_400Regular', width: 32, height: 32, borderRadius: 12, backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center'},
+  smsWidget: { backgroundColor: '#fff', borderRadius: 24, padding: 20, borderWidth: 1, borderColor: '#f3f4f6'},
+  smsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
+  smsHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8},
+  smsIconBox: { width: 32, height: 32, borderRadius: 12, backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center'},
   smsTitle: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
   smsToggle: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#4f46e5' },
-  smsBody: { fontFamily: 'Vazirmatn_400Regular', marginTop: 16, gap: 16},
-  smsDesc: { fontFamily: 'Vazirmatn_400Regular', fontSize: 12, color: '#6b7280', lineHeight: 20},
-  smsInputRow: { fontFamily: 'Vazirmatn_400Regular', position: 'relative'},
-  smsInput: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#f9fafb', borderRadius: 16, padding: 16, fontSize: 12, borderWidth: 1, borderColor: '#e5e7eb', minHeight: 80, textAlignVertical: 'top'},
-  pasteBtn: { fontFamily: 'Vazirmatn_400Regular', position: 'absolute', left: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eef2ff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: '#e0e7ff'},
+  smsBody: { marginTop: 16, gap: 16},
+  smsDesc: { fontSize: 12, color: '#6b7280', lineHeight: 20},
+  smsInputRow: { position: 'relative'},
+  smsInput: { backgroundColor: '#f9fafb', borderRadius: 16, padding: 16, fontSize: 12, borderWidth: 1, borderColor: '#e5e7eb', minHeight: 80, textAlignVertical: 'top'},
+  pasteBtn: { position: 'absolute', left: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eef2ff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: '#e0e7ff'},
   pasteBtnText: { fontSize: 11, fontFamily: 'Vazirmatn_700Bold', color: '#4f46e5' },
 
-  parsedPreview: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#ecfdf5', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#a7f3d0', gap: 12},
-  parsedHeader: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
-  parsedBank: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 8},
-  dot: { fontFamily: 'Vazirmatn_400Regular', width: 8, height: 8, borderRadius: 4},
+  parsedPreview: { backgroundColor: '#ecfdf5', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#a7f3d0', gap: 12},
+  parsedHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
+  parsedBank: { flexDirection: 'row', alignItems: 'center', gap: 8},
+  dot: { width: 8, height: 8, borderRadius: 4},
   parsedBankName: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#064e3b' },
   parsedType: { fontSize: 10, fontFamily: 'Vazirmatn_700Bold', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, overflow: 'hidden' },
-  parsedDetails: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', gap: 24},
-  parsedLabel: { fontFamily: 'Vazirmatn_400Regular', fontSize: 10, color: '#6b7280', marginBottom: 2},
+  parsedDetails: { flexDirection: 'row', gap: 24},
+  parsedLabel: { fontSize: 10, color: '#6b7280', marginBottom: 2},
   parsedValue: { fontSize: 13, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
-  applyBtn: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#059669', borderRadius: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6},
+  applyBtn: { backgroundColor: '#059669', borderRadius: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6},
   applyBtnText: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#fff' },
-  noParse: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fffbeb', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#fde68a'},
+  noParse: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fffbeb', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#fde68a'},
   noParseText: { fontSize: 11, color: '#92400e', fontFamily: 'Vazirmatn_500Medium' },
 
-  smsCollapsed: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12, backgroundColor: 'rgba(238,242,255,0.5)', borderRadius: 16, padding: 12},
-  smsCollapsedText: { fontFamily: 'Vazirmatn_400Regular', flex: 1, fontSize: 12, color: '#6b7280', lineHeight: 18},
-  openBtn: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#4f46e5', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8},
-  openBtnText: { fontSize: 11, fontFamily: 'Vazirmatn_700Bold', color: '#fff' },
-
-  amountSection: { fontFamily: 'Vazirmatn_400Regular', alignItems: 'center', gap: 8},
+  amountSection: { alignItems: 'center', gap: 8},
   sectionLabel: { fontSize: 14, fontFamily: 'Vazirmatn_500Medium', color: '#9ca3af', alignSelf: 'flex-start' },
   amountInput: { fontSize: 48, fontFamily: 'Vazirmatn_700Bold', textAlign: 'center', width: '100%', paddingVertical: 8 },
 
-  categorySection: { fontFamily: 'Vazirmatn_400Regular', gap: 12},
-  categoryGrid: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', flexWrap: 'wrap', gap: 16},
-  categoryItem: { fontFamily: 'Vazirmatn_400Regular', width: '22%', alignItems: 'center', gap: 6},
-  categoryIcon: { fontFamily: 'Vazirmatn_400Regular', width: 56, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center'},
-  categoryIconInactive: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff', borderWidth: 1, borderColor: '#f3f4f6'},
+  accountSection: { gap: 8 },
+  accountList: { gap: 8, paddingVertical: 4 },
+  accountChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
+  accountChipText: { fontSize: 13, fontFamily: 'Vazirmatn_600SemiBold', color: '#6b7280' },
+
+  categorySection: { gap: 12},
+  categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16},
+  categoryItem: { width: '22%', alignItems: 'center', gap: 6},
+  categoryIcon: { width: 56, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center'},
+  categoryIconInactive: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#f3f4f6'},
   categoryName: { fontSize: 10, fontFamily: 'Vazirmatn_500Medium', color: '#6b7280', textAlign: 'center' },
 
-  noteSection: { fontFamily: 'Vazirmatn_400Regular', gap: 8},
-  noteInput: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff', borderRadius: 16, padding: 16, fontSize: 14, borderWidth: 1, borderColor: '#e5e7eb'},
+  noteSection: { gap: 8},
+  noteInput: { backgroundColor: '#fff', borderRadius: 16, padding: 16, fontSize: 14, borderWidth: 1, borderColor: '#e5e7eb'},
 
-  dateField: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
-  dateFieldText: { fontFamily: 'Vazirmatn_400Regular', flex: 1, fontSize: 16, color: '#1f2937', textAlign: 'center' },
+  dateField: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
+  dateFieldText: { flex: 1, fontSize: 16, color: '#1f2937', textAlign: 'center' },
 
-  dpOverlay: { fontFamily: 'Vazirmatn_400Regular', flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 32 },
-  dpContainer: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '100%', maxWidth: 340, alignItems: 'center' },
+  dpOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 32 },
+  dpContainer: { backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '100%', maxWidth: 340, alignItems: 'center' },
   dpTitle: { fontSize: 18, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937', marginBottom: 4 },
   dpSubtitle: { fontSize: 11, color: '#9ca3af', fontFamily: 'Vazirmatn_500Medium', marginBottom: 20 },
-  dpRow: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', gap: 24, marginBottom: 24 },
-  dpCol: { fontFamily: 'Vazirmatn_400Regular', alignItems: 'center', gap: 8, minWidth: 80 },
+  dpRow: { flexDirection: 'row', gap: 24, marginBottom: 24 },
+  dpCol: { alignItems: 'center', gap: 8, minWidth: 80 },
   dpValue: { fontSize: 20, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937', textAlign: 'center', minHeight: 30 },
   dpLabel: { fontSize: 11, color: '#9ca3af', fontFamily: 'Vazirmatn_500Medium' },
-  dpActions: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', gap: 16, width: '100%' },
-  dpCancel: { fontFamily: 'Vazirmatn_400Regular', flex: 1, paddingVertical: 14, borderRadius: 16, backgroundColor: '#f3f4f6', alignItems: 'center' },
+  dpActions: { flexDirection: 'row', gap: 16, width: '100%' },
+  dpCancel: { flex: 1, paddingVertical: 14, borderRadius: 16, backgroundColor: '#f3f4f6', alignItems: 'center' },
   dpCancelText: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#6b7280' },
-  dpConfirm: { fontFamily: 'Vazirmatn_400Regular', flex: 1, paddingVertical: 14, borderRadius: 16, backgroundColor: '#2563eb', alignItems: 'center' },
+  dpConfirm: { flex: 1, paddingVertical: 14, borderRadius: 16, backgroundColor: '#2563eb', alignItems: 'center' },
   dpConfirmText: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#fff' },
 
-  footer: { fontFamily: 'Vazirmatn_400Regular', position: 'absolute', bottom: 0, width: '100%', padding: 24, paddingBottom: 32, backgroundColor: 'transparent'},
-  saveBtn: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#2563eb', borderRadius: 24, paddingVertical: 16, alignItems: 'center', shadowColor: '#2563eb', shadowOffset: { width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
-  saveBtnDisabled: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#d1d5db'},
+  recurringSection: { gap: 12 },
+  recurringToggle: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  checkbox: { width: 24, height: 24, borderRadius: 8, borderWidth: 2, borderColor: '#d1d5db', alignItems: 'center', justifyContent: 'center' },
+  checkboxActive: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  recurringLabel: { fontSize: 14, fontFamily: 'Vazirmatn_600SemiBold', color: '#1f2937' },
+  recurringOptions: { gap: 12, paddingRight: 36 },
+  freqRow: { flexDirection: 'row', gap: 8 },
+  freqBtn: { flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: '#f3f4f6', alignItems: 'center' },
+  freqBtnActive: { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#2563eb' },
+  freqBtnText: { fontSize: 11, fontFamily: 'Vazirmatn_600SemiBold', color: '#6b7280' },
+  freqBtnTextActive: { color: '#2563eb' },
+  intervalRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  intervalLabel: { fontSize: 13, fontFamily: 'Vazirmatn_500Medium', color: '#6b7280' },
+  intervalInput: { width: 48, textAlign: 'center', paddingVertical: 6, borderRadius: 8, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', fontSize: 16, fontFamily: 'Vazirmatn_700Bold' },
+
+  footer: { position: 'absolute', bottom: 0, width: '100%', padding: 24, paddingBottom: 32, backgroundColor: 'transparent'},
+  saveBtn: { backgroundColor: '#2563eb', borderRadius: 24, paddingVertical: 16, alignItems: 'center', shadowColor: '#2563eb', shadowOffset: { width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
+  saveBtnDisabled: { backgroundColor: '#d1d5db'},
   saveBtnText: { fontSize: 18, fontFamily: 'Vazirmatn_700Bold', color: '#fff' },
 });

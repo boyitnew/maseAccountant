@@ -2,25 +2,39 @@
   "expo": {
     "name": "حسابدار شخصی من",
     "slug": "my-accountant",
-    "version": "1.0.0",
+    "version": "1.3.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
     "splash": {
       "backgroundColor": "#f8fafc"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.myaccountant.app"
+      "bundleIdentifier": "com.myaccountant.app",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "برای ورود سریع با اثر انگشت استفاده می‌شود"
+      }
     },
     "android": {
       "package": "com.myaccountant.app",
-      "versionCode": 1
+      "versionCode": 3,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#4f46e5"
+      }
     },
     "plugins": [
       "expo-font",
       "expo-notifications",
-      "expo-document-picker"
+      "expo-document-picker",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "برای ورود سریع با اثر انگشت استفاده می‌شود"
+        }
+      ]
     ],
     "extra": {
       "eas": {

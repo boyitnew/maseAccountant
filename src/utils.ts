@@ -210,3 +210,17 @@ export function parseDateFromInput(input: string): Date | null {
   if (isNaN(y) || isNaN(m) || isNaN(d)) return null;
   return shamsiToGregorian(y, m, d);
 }
+
+export function getShamsiNow(): { year: number; month: number; day: number } {
+  const n = new Date();
+  return gregorianToShamsi(n.getFullYear(), n.getMonth() + 1, n.getDate());
+}
+
+export function formatShamsiDateParts(year: number, month: number, day: number): string {
+  return `${day} ${SHAMSI_MONTH_NAMES[month - 1]} ${year}`;
+}
+
+export function calculateGoalProgress(current: number, target: number): number {
+  if (target <= 0) return 0;
+  return Math.min(Math.round((current / target) * 100), 100);
+}

@@ -1,6 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Transaction, Reminder, Category, UserProfile, BackupData, DEFAULT_CATEGORIES } from '../types';
+import { Platform, NativeModules } from 'react-native';
+import {
+  Transaction, Reminder, Category, UserProfile, BackupData, DEFAULT_CATEGORIES,
+  Account, RecurringTransaction, SavingsGoal, Debt, AppLock, DEFAULT_ACCOUNTS,
+} from '../types';
 import { generateId } from '../utils';
 
 interface FinanceContextType {
@@ -29,6 +33,33 @@ interface FinanceContextType {
   getBackupData: () => BackupData;
   importBackup: (data: any) => boolean;
   isLoaded: boolean;
+  // Accounts
+  accounts: Account[];
+  addAccount: (a: Omit<Account, 'id'>) => void;
+  updateAccount: (id: string, a: Omit<Account, 'id'>) => void;
+  deleteAccount: (id: string) => void;
+  getAccountBalance: (accountId: string) => number;
+  // Recurring
+  recurringTransactions: RecurringTransaction[];
+  addRecurring: (r: Omit<RecurringTransaction, 'id'>) => void;
+  updateRecurring: (id: string, r: Omit<RecurringTransaction, 'id'>) => void;
+  deleteRecurring: (id: string) => void;
+  processRecurring: () => void;
+  // Goals
+  savingsGoals: SavingsGoal[];
+  addSavingsGoal: (g: Omit<SavingsGoal, 'id'>) => void;
+  updateSavingsGoal: (id: string, g: Omit<SavingsGoal, 'id'>) => void;
+  deleteSavingsGoal: (id: string) => void;
+  contributeToGoal: (id: string, amount: number) => void;
+  // Debts
+  debts: Debt[];
+  addDebt: (d: Omit<Debt, 'id'>) => void;
+  updateDebt: (id: string, d: Omit<Debt, 'id'>) => void;
+  deleteDebt: (id: string) => void;
+  payDebt: (id: string, amount: number) => void;
+  // Lock
+  appLock: AppLock;
+  setAppLock: (lock: AppLock) => void;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -39,10 +70,16 @@ const KEYS = {
   budgets: '@finance/budgets',
   reminders: '@finance/reminders',
   profile: '@finance/profile',
+  accounts: '@finance/accounts',
+  recurring: '@finance/recurring',
+  goals: '@finance/goals',
+  debts: '@finance/debts',
+  lock: '@finance/lock',
 } as const;
 
 const DEFAULT_PROFILE: UserProfile = { name: 'کاربر', phone: '', email: '' };
 const DEFAULT_REMINDER: Reminder = { id: '1', title: 'اجاره خانه', amount: 5000000, dueDate: 1, type: 'monthly', isActive: true, notificationInterval: 0 };
+const DEFAULT_LOCK: AppLock = { enabled: false, useBiometric: false };
 
 function sortByDateDesc(txs: Transaction[]): Transaction[] {
   return [...txs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -55,47 +92,76 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const [budgets, setBudgets] = useState<Record<string, number>>({});
   const [reminders, setReminders] = useState<Reminder[]>([DEFAULT_REMINDER]);
   const [userProfile, setUserProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+  const [accounts, setAccounts] = useState<Account[]>(DEFAULT_ACCOUNTS);
+  const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [appLock, setAppLockState] = useState<AppLock>(DEFAULT_LOCK);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const [txData, catData, budData, remData, profData] = await Promise.all([
+        const [
+          txData, catData, budData, remData, profData,
+          accData, recData, goalData, debtData, lockData,
+        ] = await Promise.all([
           AsyncStorage.getItem(KEYS.transactions),
           AsyncStorage.getItem(KEYS.categories),
           AsyncStorage.getItem(KEYS.budgets),
           AsyncStorage.getItem(KEYS.reminders),
           AsyncStorage.getItem(KEYS.profile),
+          AsyncStorage.getItem(KEYS.accounts),
+          AsyncStorage.getItem(KEYS.recurring),
+          AsyncStorage.getItem(KEYS.goals),
+          AsyncStorage.getItem(KEYS.debts),
+          AsyncStorage.getItem(KEYS.lock),
         ]);
         if (txData) setTransactions(sortByDateDesc(JSON.parse(txData)));
         if (catData) setCategories(JSON.parse(catData));
         if (budData) setBudgets(JSON.parse(budData));
         if (remData) setReminders(JSON.parse(remData));
         if (profData) setUserProfile(JSON.parse(profData));
+        if (accData) setAccounts(JSON.parse(accData));
+        if (recData) setRecurringTransactions(JSON.parse(recData));
+        if (goalData) setSavingsGoals(JSON.parse(goalData));
+        if (debtData) setDebts(JSON.parse(debtData));
+        if (lockData) setAppLockState(JSON.parse(lockData));
       } catch {}
       setIsLoaded(true);
     })();
   }, []);
 
+  const persist = useCallback(async (key: string, data: any) => {
+    try { await AsyncStorage.setItem(key, JSON.stringify(data)); } catch {}
+  }, []);
+
+  useEffect(() => { if (isLoaded) persist(KEYS.transactions, transactions); }, [transactions, isLoaded]);
+  useEffect(() => { if (isLoaded) persist(KEYS.categories, categories); }, [categories, isLoaded]);
+  useEffect(() => { if (isLoaded) persist(KEYS.budgets, budgets); }, [budgets, isLoaded]);
+  useEffect(() => { if (isLoaded) persist(KEYS.reminders, reminders); }, [reminders, isLoaded]);
+  useEffect(() => { if (isLoaded) persist(KEYS.profile, userProfile); }, [userProfile, isLoaded]);
+  useEffect(() => { if (isLoaded) persist(KEYS.accounts, accounts); }, [accounts, isLoaded]);
+  useEffect(() => { if (isLoaded) persist(KEYS.recurring, recurringTransactions); }, [recurringTransactions, isLoaded]);
+  useEffect(() => { if (isLoaded) persist(KEYS.goals, savingsGoals); }, [savingsGoals, isLoaded]);
+  useEffect(() => { if (isLoaded) persist(KEYS.debts, debts); }, [debts, isLoaded]);
+  useEffect(() => { if (isLoaded) persist(KEYS.lock, appLock); }, [appLock, isLoaded]);
+
   useEffect(() => {
-    if (isLoaded) AsyncStorage.setItem(KEYS.transactions, JSON.stringify(transactions)).catch(() => {});
+    if (!isLoaded || Platform.OS !== 'android') return;
+    const total = transactions.reduce((s, t) => s + t.amount * (t.type === 'income' ? 1 : -1), 0);
+    const monthStr = new Date().toISOString().slice(0, 7);
+    const monthTxs = transactions.filter(t => t.date.startsWith(monthStr));
+    const inc = monthTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const exp = monthTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    try {
+      NativeModules.FinanceWidget?.updateWidget({
+        balance: `${total.toLocaleString()} تومان`,
+        income: inc.toLocaleString(),
+        expense: exp.toLocaleString(),
+      });
+    } catch {}
   }, [transactions, isLoaded]);
-
-  useEffect(() => {
-    if (isLoaded) AsyncStorage.setItem(KEYS.categories, JSON.stringify(categories)).catch(() => {});
-  }, [categories, isLoaded]);
-
-  useEffect(() => {
-    if (isLoaded) AsyncStorage.setItem(KEYS.budgets, JSON.stringify(budgets)).catch(() => {});
-  }, [budgets, isLoaded]);
-
-  useEffect(() => {
-    if (isLoaded) AsyncStorage.setItem(KEYS.reminders, JSON.stringify(reminders)).catch(() => {});
-  }, [reminders, isLoaded]);
-
-  useEffect(() => {
-    if (isLoaded) AsyncStorage.setItem(KEYS.profile, JSON.stringify(userProfile)).catch(() => {});
-  }, [userProfile, isLoaded]);
 
   const addTransaction = useCallback((tx: Omit<Transaction, 'id'>) => {
     const newTx: Transaction = { ...tx, id: generateId() };
@@ -145,34 +211,160 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const completeReminder = useCallback((id: string) => {
     setReminders(prev =>
       prev.map(r => r.id === id ? { ...r, completed: !r.completed } : r)
-        .filter(r => !(r.type === 'onetime' && r.completed))
     );
   }, []);
 
+  const addAccount = useCallback((a: Omit<Account, 'id'>) => {
+    setAccounts(prev => [...prev, { ...a, id: generateId() }]);
+  }, []);
+
+  const updateAccount = useCallback((id: string, a: Omit<Account, 'id'>) => {
+    setAccounts(prev => prev.map(x => x.id === id ? { ...a, id } : x));
+  }, []);
+
+  const deleteAccount = useCallback((id: string) => {
+    setAccounts(prev => prev.filter(a => a.id !== id));
+    setTransactions(prev => prev.filter(t => t.accountId !== id));
+  }, []);
+
+  const getAccountBalance = useCallback((accountId: string): number => {
+    const acct = accounts.find(a => a.id === accountId);
+    if (!acct) return 0;
+    let balance = acct.initialBalance;
+    transactions.filter(t => t.accountId === accountId).forEach(t => {
+      balance += t.type === 'income' ? t.amount : -t.amount;
+    });
+    return balance;
+  }, [accounts, transactions]);
+
+  const addRecurring = useCallback((r: Omit<RecurringTransaction, 'id'>) => {
+    setRecurringTransactions(prev => [...prev, { ...r, id: generateId() }]);
+  }, []);
+
+  const updateRecurring = useCallback((id: string, r: Omit<RecurringTransaction, 'id'>) => {
+    setRecurringTransactions(prev => prev.map(x => x.id === id ? { ...r, id } : x));
+  }, []);
+
+  const deleteRecurring = useCallback((id: string) => {
+    setRecurringTransactions(prev => prev.filter(r => r.id !== id));
+  }, []);
+
+  const processRecurring = useCallback(() => {
+    const now = new Date();
+    recurringTransactions.forEach(rt => {
+      if (!rt.isActive) return;
+      const nextDate = new Date(rt.startDate);
+      while (nextDate <= now) {
+        addTransaction({
+          amount: rt.amount,
+          type: rt.type,
+          categoryId: rt.categoryId,
+          note: rt.note + ' (مکرر)',
+          date: nextDate.toISOString(),
+          accountId: rt.accountId,
+        });
+        switch (rt.frequency) {
+          case 'daily': nextDate.setDate(nextDate.getDate() + rt.intervalValue); break;
+          case 'weekly': nextDate.setDate(nextDate.getDate() + rt.intervalValue * 7); break;
+          case 'monthly': nextDate.setMonth(nextDate.getMonth() + rt.intervalValue); break;
+          case 'yearly': nextDate.setFullYear(nextDate.getFullYear() + rt.intervalValue); break;
+        }
+        if (rt.endDate && nextDate > new Date(rt.endDate)) break;
+      }
+      setRecurringTransactions(prev => prev.map(r =>
+        r.id === rt.id ? { ...r, startDate: nextDate.toISOString() } : r
+      ));
+    });
+  }, [recurringTransactions, addTransaction]);
+
+  const addSavingsGoal = useCallback((g: Omit<SavingsGoal, 'id'>) => {
+    setSavingsGoals(prev => [...prev, { ...g, id: generateId() }]);
+  }, []);
+
+  const updateSavingsGoal = useCallback((id: string, g: Omit<SavingsGoal, 'id'>) => {
+    setSavingsGoals(prev => prev.map(x => x.id === id ? { ...g, id } : x));
+  }, []);
+
+  const deleteSavingsGoal = useCallback((id: string) => {
+    setSavingsGoals(prev => prev.filter(g => g.id !== id));
+  }, []);
+
+  const contributeToGoal = useCallback((id: string, amount: number) => {
+    setSavingsGoals(prev => prev.map(g =>
+      g.id === id ? { ...g, currentAmount: g.currentAmount + amount } : g
+    ));
+    if (amount > 0) {
+      addTransaction({
+        amount,
+        type: 'expense',
+        categoryId: 'savings_goal',
+        note: 'واریز به هدف پس‌انداز',
+        date: new Date().toISOString(),
+        accountId: '',
+      });
+    }
+  }, [addTransaction]);
+
+  const addDebt = useCallback((d: Omit<Debt, 'id'>) => {
+    setDebts(prev => [...prev, { ...d, id: generateId() }]);
+  }, []);
+
+  const updateDebt = useCallback((id: string, d: Omit<Debt, 'id'>) => {
+    setDebts(prev => prev.map(x => x.id === id ? { ...d, id } : x));
+  }, []);
+
+  const deleteDebt = useCallback((id: string) => {
+    setDebts(prev => prev.filter(d => d.id !== id));
+  }, []);
+
+  const payDebt = useCallback((id: string, amount: number) => {
+    setDebts(prev => prev.map(d => {
+      if (d.id !== id) return d;
+      const newRemaining = Math.max(d.remainingAmount - amount, 0);
+      const isPaid = newRemaining <= 0;
+      return { ...d, remainingAmount: newRemaining, isPaid };
+    }));
+    if (amount > 0) {
+      addTransaction({
+        amount,
+        type: amount > 0 ? 'expense' : 'income',
+        categoryId: 'debt_payment',
+        note: 'پرداخت بدهی',
+        date: new Date().toISOString(),
+        accountId: '',
+      });
+    }
+  }, [addTransaction]);
+
+  const setAppLock = useCallback((lock: AppLock) => {
+    setAppLockState(lock);
+  }, []);
+
   const now = new Date();
-  const currentMonthTransactions = transactions.filter(t => {
+  const currentMonthTransactions = useMemo(() => transactions.filter(t => {
     const d = new Date(t.date);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  });
+  }), [transactions]);
 
-  const monthlyIncome = currentMonthTransactions
+  const monthlyIncome = useMemo(() => currentMonthTransactions
     .filter(t => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + t.amount, 0), [currentMonthTransactions]);
 
-  const monthlyExpense = currentMonthTransactions
+  const monthlyExpense = useMemo(() => currentMonthTransactions
     .filter(t => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + t.amount, 0), [currentMonthTransactions]);
 
-  const totalBalance = transactions.reduce((sum, t) => {
+  const totalBalance = useMemo(() => transactions.reduce((sum, t) => {
     return t.type === 'income' ? sum + t.amount : sum - t.amount;
-  }, 0);
+  }, 0), [transactions]);
 
   const getBackupData = useCallback((): BackupData => {
     return {
       transactions, budgets, categories, reminders, userProfile,
+      accounts, recurringTransactions, savingsGoals, debts, appLock,
       exportedAt: new Date().toISOString()
     };
-  }, [transactions, budgets, categories, reminders, userProfile]);
+  }, [transactions, budgets, categories, reminders, userProfile, accounts, recurringTransactions, savingsGoals, debts, appLock]);
 
   const importBackup = useCallback((data: any): boolean => {
     try {
@@ -182,6 +374,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       if (data.categories && Array.isArray(data.categories)) setCategories(data.categories);
       if (data.reminders && Array.isArray(data.reminders)) setReminders(data.reminders);
       if (data.userProfile && typeof data.userProfile === 'object') setUserProfile(data.userProfile);
+      if (data.accounts && Array.isArray(data.accounts)) setAccounts(data.accounts);
+      if (data.recurringTransactions && Array.isArray(data.recurringTransactions)) setRecurringTransactions(data.recurringTransactions);
+      if (data.savingsGoals && Array.isArray(data.savingsGoals)) setSavingsGoals(data.savingsGoals);
+      if (data.debts && Array.isArray(data.debts)) setDebts(data.debts);
+      if (data.appLock && typeof data.appLock === 'object') setAppLockState(data.appLock);
       return true;
     } catch { return false; }
   }, []);
@@ -195,6 +392,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     reminders, addReminder, deleteReminder, toggleReminder, completeReminder,
     editingTransactionId, setEditingTransactionId,
     getBackupData, importBackup, isLoaded,
+    accounts, addAccount, updateAccount, deleteAccount, getAccountBalance,
+    recurringTransactions, addRecurring, updateRecurring, deleteRecurring, processRecurring,
+    savingsGoals, addSavingsGoal, updateSavingsGoal, deleteSavingsGoal, contributeToGoal,
+    debts, addDebt, updateDebt, deleteDebt, payDebt,
+    appLock, setAppLock,
   };
 
   return (

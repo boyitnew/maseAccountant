@@ -4,17 +4,18 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFinance } from '../context/FinanceContext';
-import { formatCurrency, formatDate, getPersianDate, isSameDay, generateLast14Days, gregorianToShamsi, SHAMSI_MONTH_NAMES } from '../utils';
-import { PARENT_CATEGORIES, Reminder } from '../types';
+import { formatCurrency, formatDate, getPersianDate, isSameDay, generateLast14Days,
+  gregorianToShamsi, SHAMSI_MONTH_NAMES, calculateGoalProgress } from '../utils';
+import { PARENT_CATEGORIES, Reminder, SavingsGoal } from '../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CONTENT_PADDING = 24;
 const CALENDAR_ITEM_WIDTH = 68;
 
-const iconMap: Record<string, keyof typeof Feather.glyphMap> = {
+const iconMap: Record<string, any> = {
   'credit-card': 'credit-card', monitor: 'monitor', gift: 'gift', coffee: 'coffee',
   truck: 'truck', 'shopping-bag': 'shopping-bag', home: 'home', 'file-text': 'file-text',
-  film: 'film', activity: 'activity', zap: 'zap', bus: 'bus', plane: 'plane',
+  film: 'film', activity: 'activity', zap: 'zap',
 };
 
 interface HomeScreenProps {
@@ -25,12 +26,13 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
   const {
     totalBalance, monthlyIncome, monthlyExpense, transactions, budgets,
     deleteTransaction, setEditingTransactionId, categories, userProfile,
-    reminders,
+    reminders, accounts, getAccountBalance, savingsGoals,
   } = useFinance();
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [budgetDetail, setBudgetDetail] = useState<{ id: string; name: string; color: string } | null>(null);
   const calendarDays = useMemo(() => generateLast14Days(), []);
+  const [showAllAccounts, setShowAllAccounts] = useState(false);
 
   const categoryExpenses = useMemo(() => {
     const now = new Date();
@@ -130,6 +132,15 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [budgetDetail, transactions, categories]);
 
+  const accountSummaries = useMemo(() => {
+    return accounts.map(a => ({
+      ...a,
+      balance: getAccountBalance(a.id),
+    }));
+  }, [accounts, getAccountBalance]);
+
+  const activeGoals = savingsGoals.filter(g => g.currentAmount < g.targetAmount);
+
   return (
     <>
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -170,6 +181,54 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
           </View>
         </View>
       </View>
+
+      <View style={styles.sectionRow}>
+        <View style={styles.sectionHeader}>
+          <Feather name="layers" size={16} color="#2563eb" />
+          <Text style={styles.sectionTitle}>حساب‌ها</Text>
+        </View>
+        <TouchableOpacity onPress={() => setShowAllAccounts(!showAllAccounts)}>
+          <Text style={styles.seeAll}>{showAllAccounts ? 'کمتر' : 'همه'}</Text>
+        </TouchableOpacity>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.accountsStrip}>
+        {(showAllAccounts ? accountSummaries : accountSummaries.slice(0, 3)).map(a => (
+          <View key={a.id} style={[styles.accountMiniCard, { borderLeftColor: a.color, borderLeftWidth: 3 }]}>
+            <Text style={styles.accountMiniName} numberOfLines={1}>{a.name}</Text>
+            <Text style={[styles.accountMiniBalance, { color: a.balance >= 0 ? '#10b981' : '#ef4444' }]}>
+              {formatCurrency(a.balance, true)}
+            </Text>
+          </View>
+        ))}
+      </ScrollView>
+
+      {activeGoals.length > 0 && (
+        <View style={styles.goalsPreview}>
+          <View style={styles.sectionRow}>
+            <View style={styles.sectionHeader}>
+              <Feather name="flag" size={16} color="#8b5cf6" />
+              <Text style={styles.sectionTitle}>اهداف پس‌انداز</Text>
+            </View>
+          </View>
+          {activeGoals.slice(0, 2).map(g => {
+            const pct = calculateGoalProgress(g.currentAmount, g.targetAmount);
+            return (
+              <View key={g.id} style={styles.goalMiniCard}>
+                <View style={[styles.goalMiniIcon, { backgroundColor: g.color + '20' }]}>
+                  <Feather name={iconMap[g.icon] || 'flag'} size={16} color={g.color} />
+                </View>
+                <View style={styles.goalMiniInfo}>
+                  <Text style={styles.goalMiniName}>{g.name}</Text>
+                  <Text style={styles.goalMiniProgress}>{pct}%</Text>
+                </View>
+                <View style={styles.goalMiniBarBg}>
+                  <View style={[styles.goalMiniBarFill, { width: `${pct}%`, backgroundColor: g.color }]} />
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
 
       <View style={styles.calendarSection}>
         <View style={styles.calendarHeader}>
@@ -244,7 +303,7 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
             <Feather name="pie-chart" size={16} color="#2563eb" />
             <Text style={styles.budgetSummaryTitle}>بودجه ماه جاری</Text>
           </View>
-          {budgetItems.map(item => (
+          {budgetItems.slice(0, 4).map(item => (
             <TouchableOpacity key={item.id} activeOpacity={0.7}
               onPress={() => setBudgetDetail({ id: item.id, name: item.name, color: item.color })}>
               <View style={styles.budgetSummaryItem}>
@@ -264,15 +323,9 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
                   }]} />
                 </View>
                 <View style={styles.budgetSummaryStats}>
-                  <Text style={styles.budgetSummaryStat}>
-                    هزینه: {formatCurrency(item.spent, true)}
-                  </Text>
-                  <Text style={styles.budgetSummaryStat}>
-                    باقی‌مانده: {item.limit > item.spent ? formatCurrency(item.limit - item.spent, true) : '0'}
-                  </Text>
-                  <Text style={styles.budgetSummaryStat}>
-                    سقف: {formatCurrency(item.limit, true)}
-                  </Text>
+                  <Text style={styles.budgetSummaryStat}>هزینه: {formatCurrency(item.spent, true)}</Text>
+                  <Text style={styles.budgetSummaryStat}>باقی‌مانده: {item.limit > item.spent ? formatCurrency(item.limit - item.spent, true) : '0'}</Text>
+                  <Text style={styles.budgetSummaryStat}>سقف: {formatCurrency(item.limit, true)}</Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -296,6 +349,7 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
             const cat = categories.find(c => c.id === tx.categoryId);
             const iconName = (cat?.icon && iconMap[cat.icon]) ? iconMap[cat.icon] : 'credit-card';
             const isInc = tx.type === 'income';
+            const acct = accounts.find(a => a.id === tx.accountId);
             return (
               <View key={tx.id} style={styles.txCard}>
                 <View style={styles.txRow}>
@@ -304,7 +358,10 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
                   </View>
                   <View style={styles.txInfo}>
                     <Text style={styles.txName} numberOfLines={1}>{tx.note || cat?.name}</Text>
-                    <Text style={styles.txDate}>{formatDate(tx.date)}</Text>
+                    <Text style={styles.txDate}>
+                      {formatDate(tx.date)}
+                      {acct ? ` • ${acct.name}` : ''}
+                    </Text>
                   </View>
                   <Text style={[styles.txAmount, isInc && { color: '#10b981' }]}>
                     {isInc ? '+' : '-'}{formatCurrency(tx.amount, true)}
@@ -389,7 +446,7 @@ const styles = StyleSheet.create({
   userName: { fontSize: 20, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
   avatar: { fontFamily: 'Vazirmatn_400Regular', width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(219,234,254,0.5)', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff'},
 
-  balanceCard: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#4f46e5', borderRadius: 32, padding: 24, marginBottom: 32,
+  balanceCard: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#4f46e5', borderRadius: 32, padding: 24, marginBottom: 24,
     shadowColor: '#3b82f6', shadowOffset: { width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 8, elevation: 8,
     overflow: 'hidden',
   },
@@ -404,80 +461,107 @@ const styles = StyleSheet.create({
   balanceItemValue: { fontSize: 13, fontFamily: 'Vazirmatn_700Bold', color: '#fff' },
   balanceDivider: { fontFamily: 'Vazirmatn_400Regular', width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.2)'},
 
-  budgetSummarySection: { fontFamily: 'Vazirmatn_400Regular', marginBottom: 24, gap: 12 },
-  budgetSummaryHeader: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionTitle: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
+  seeAll: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#2563eb' },
+
+  accountsStrip: { gap: 12, paddingBottom: 8, marginBottom: 16 },
+  accountMiniCard: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 14, minWidth: 140,
+    borderWidth: 1, borderColor: '#f3f4f6',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1,
+  },
+  accountMiniName: { fontSize: 12, fontFamily: 'Vazirmatn_600SemiBold', color: '#6b7280', marginBottom: 4 },
+  accountMiniBalance: { fontSize: 16, fontFamily: 'Vazirmatn_700Bold' },
+
+  goalsPreview: { marginBottom: 20, gap: 10 },
+  goalMiniCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#fff', borderRadius: 16, padding: 14,
+    borderWidth: 1, borderColor: '#f3f4f6',
+  },
+  goalMiniIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  goalMiniInfo: { flex: 1 },
+  goalMiniName: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
+  goalMiniProgress: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#8b5cf6' },
+  goalMiniBarBg: { height: 6, borderRadius: 3, backgroundColor: '#f3f4f6', flex: 1, overflow: 'hidden', marginTop: 4 },
+  goalMiniBarFill: { height: 6, borderRadius: 3 },
+
+  budgetSummarySection: { marginBottom: 24, gap: 12 },
+  budgetSummaryHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   budgetSummaryTitle: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
-  budgetSummaryItem: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#f3f4f6', shadowColor: '#000', shadowOffset: { width: 0, height: 1}, shadowOpacity: 0.03, shadowRadius: 3, elevation: 1 },
-  budgetSummaryRow: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  budgetSummaryItem: { backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#f3f4f6', shadowColor: '#000', shadowOffset: { width: 0, height: 1}, shadowOpacity: 0.03, shadowRadius: 3, elevation: 1 },
+  budgetSummaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   budgetSummaryName: { fontSize: 13, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937', flex: 1 },
-  budgetSummaryRight: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 4 },
+  budgetSummaryRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   budgetSummaryPct: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#6b7280' },
-  budgetSummaryBarBg: { fontFamily: 'Vazirmatn_400Regular', height: 8, borderRadius: 4, backgroundColor: '#f3f4f6', overflow: 'hidden', marginBottom: 8 },
-  budgetSummaryBarFill: { fontFamily: 'Vazirmatn_400Regular', height: 8, borderRadius: 4 },
-  budgetSummaryStats: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', justifyContent: 'space-between' },
+  budgetSummaryBarBg: { height: 8, borderRadius: 4, backgroundColor: '#f3f4f6', overflow: 'hidden', marginBottom: 8 },
+  budgetSummaryBarFill: { height: 8, borderRadius: 4 },
+  budgetSummaryStats: { flexDirection: 'row', justifyContent: 'space-between' },
   budgetSummaryStat: { fontSize: 10, color: '#9ca3af', fontFamily: 'Vazirmatn_500Medium' },
 
-  calendarSection: { fontFamily: 'Vazirmatn_400Regular', marginBottom: 24},
-  calendarHeader: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12},
+  calendarSection: { marginBottom: 24},
+  calendarHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12},
   calendarTitle: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
-  calendarStrip: { fontFamily: 'Vazirmatn_400Regular', gap: 12, paddingBottom: 4},
-  calendarItem: { fontFamily: 'Vazirmatn_400Regular', width: CALENDAR_ITEM_WIDTH, height: 64, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#f3f4f6', shadowColor: '#000', shadowOffset: { width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
-  calendarItemActive: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#2563eb', borderColor: 'transparent', transform: [{ scale: 1.05}] },
+  calendarStrip: { gap: 12, paddingBottom: 4},
+  calendarItem: { width: CALENDAR_ITEM_WIDTH, height: 64, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#f3f4f6', shadowColor: '#000', shadowOffset: { width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
+  calendarItemActive: { backgroundColor: '#2563eb', borderColor: 'transparent', transform: [{ scale: 1.05}] },
   calendarDayName: { fontSize: 10, fontFamily: 'Vazirmatn_500Medium', color: '#9ca3af', marginBottom: 2 },
   calendarDayNum: { fontSize: 18, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
-  calendarTextActive: { fontFamily: 'Vazirmatn_400Regular', color: '#fff'},
+  calendarTextActive: { color: '#fff'},
 
-  dailySummary: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', gap: 16, marginBottom: 24},
-  dailyCard: { fontFamily: 'Vazirmatn_400Regular', flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#f3f4f6', shadowColor: '#000', shadowOffset: { width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
+  dailySummary: { flexDirection: 'row', gap: 16, marginBottom: 24},
+  dailyCard: { flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#f3f4f6', shadowColor: '#000', shadowOffset: { width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
   dailyLabel: { fontSize: 10, color: '#6b7280', fontFamily: 'Vazirmatn_500Medium' },
   dailyAmount: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold' },
 
-  transactionsSection: { fontFamily: 'Vazirmatn_400Regular', flex: 1},
-  transactionsHeader: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16},
+  transactionsSection: { flex: 1},
+  transactionsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16},
   transactionsTitle: { fontSize: 18, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
   transactionsDate: { fontSize: 12, color: '#9ca3af', fontFamily: 'Vazirmatn_500Medium', paddingBottom: 2 },
 
-  emptyState: { fontFamily: 'Vazirmatn_400Regular', alignItems: 'center', justifyContent: 'center', paddingVertical: 40, backgroundColor: '#fff', borderRadius: 24, borderWidth: 1, borderStyle: 'dashed', borderColor: '#e5e7eb', gap: 12},
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40, backgroundColor: '#fff', borderRadius: 24, borderWidth: 1, borderStyle: 'dashed', borderColor: '#e5e7eb', gap: 12},
   emptyText: { fontSize: 14, fontFamily: 'Vazirmatn_500Medium', color: '#9ca3af' },
 
-  txCard: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1}, shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
-  txRow: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 16},
-  txIcon: { fontFamily: 'Vazirmatn_400Regular', width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center'},
-  txInfo: { fontFamily: 'Vazirmatn_400Regular', flex: 1},
+  txCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1}, shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
+  txRow: { flexDirection: 'row', alignItems: 'center', gap: 16},
+  txIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center'},
+  txInfo: { flex: 1},
   txName: { fontSize: 15, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937', marginBottom: 2 },
   txDate: { fontSize: 12, color: '#9ca3af', fontFamily: 'Vazirmatn_500Medium' },
   txAmount: { fontSize: 15, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
-  txActions: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 12, paddingLeft: 64},
-  editBtn: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eff6ff', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8},
+  txActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 12, paddingLeft: 64},
+  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eff6ff', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8},
   editBtnText: { fontSize: 11, color: '#2563eb', fontFamily: 'Vazirmatn_500Medium' },
-  deleteBtn: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fef2f2', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8},
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fef2f2', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8},
   deleteBtnText: { fontSize: 11, color: '#ef4444', fontFamily: 'Vazirmatn_500Medium' },
 
-  overdueSection: { fontFamily: 'Vazirmatn_400Regular', marginBottom: 24, gap: 10 },
-  overdueHeader: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  overdueSection: { marginBottom: 24, gap: 10 },
+  overdueHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   overdueTitle: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#ef4444' },
-  overdueCard: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fef2f2', borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#fecaca' },
-  overdueIconBox: { fontFamily: 'Vazirmatn_400Regular', width: 40, height: 40, borderRadius: 12, backgroundColor: '#fee2e2', alignItems: 'center', justifyContent: 'center' },
-  overdueInfo: { fontFamily: 'Vazirmatn_400Regular', flex: 1 },
+  overdueCard: { backgroundColor: '#fef2f2', borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#fecaca' },
+  overdueIconBox: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#fee2e2', alignItems: 'center', justifyContent: 'center' },
+  overdueInfo: { flex: 1 },
   overdueName: { fontSize: 13, fontFamily: 'Vazirmatn_700Bold', color: '#991b1b' },
   overdueMeta: { fontSize: 11, fontFamily: 'Vazirmatn_500Medium', color: '#b91c1c', marginTop: 2 },
   overdueAmount: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#991b1b' },
 
-  bdOverlay: { fontFamily: 'Vazirmatn_400Regular', flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' },
-  bdContainer: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#f8fafc', borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '85%', minHeight: '50%' },
-  bdHeader: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 24, paddingBottom: 16, backgroundColor: '#fff', borderTopLeftRadius: 32, borderTopRightRadius: 32, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  bdHeaderLeft: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 12 },
-  bdBack: { fontFamily: 'Vazirmatn_400Regular', width: 40, height: 40, borderRadius: 12, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
+  bdOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' },
+  bdContainer: { backgroundColor: '#f8fafc', borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '85%', minHeight: '50%' },
+  bdHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 24, paddingBottom: 16, backgroundColor: '#fff', borderTopLeftRadius: 32, borderTopRightRadius: 32, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  bdHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  bdBack: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
   bdTitle: { fontSize: 16, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
   bdSubtitle: { fontSize: 11, fontFamily: 'Vazirmatn_500Medium', color: '#9ca3af', marginTop: 2 },
   bdCount: { fontSize: 12, fontFamily: 'Vazirmatn_600SemiBold', color: '#6b7280', backgroundColor: '#f3f4f6', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  bdList: { fontFamily: 'Vazirmatn_400Regular', flex: 1 },
-  bdListContent: { fontFamily: 'Vazirmatn_400Regular', padding: 24, paddingBottom: 40, gap: 12 },
-  bdEmpty: { fontFamily: 'Vazirmatn_400Regular', alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12 },
+  bdList: { flex: 1 },
+  bdListContent: { padding: 24, paddingBottom: 40, gap: 12 },
+  bdEmpty: { alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12 },
   bdEmptyText: { fontSize: 13, fontFamily: 'Vazirmatn_500Medium', color: '#9ca3af' },
-  bdTxCard: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff', borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#f3f4f6' },
-  bdTxIcon: { fontFamily: 'Vazirmatn_400Regular', width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  bdTxInfo: { fontFamily: 'Vazirmatn_400Regular', flex: 1 },
+  bdTxCard: { backgroundColor: '#fff', borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#f3f4f6' },
+  bdTxIcon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  bdTxInfo: { flex: 1 },
   bdTxName: { fontSize: 13, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
   bdTxDate: { fontSize: 11, fontFamily: 'Vazirmatn_500Medium', color: '#9ca3af', marginTop: 2 },
   bdTxAmount: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },

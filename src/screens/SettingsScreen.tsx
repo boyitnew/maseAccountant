@@ -7,26 +7,38 @@ import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { Feather } from '@expo/vector-icons';
 import { useFinance } from '../context/FinanceContext';
-import { TransactionType, ParentCategoryType, Category, PARENT_CATEGORIES, COLOR_OPTIONS, CATEGORY_ICONS } from '../types';
+import {
+  TransactionType, ParentCategoryType, Category, PARENT_CATEGORIES, COLOR_OPTIONS, CATEGORY_ICONS,
+  GOAL_ICONS, DEBT_ICONS,
+} from '../types';
+import { formatCurrency, calculateGoalProgress, generateId, getShamsiNow, SHAMSI_MONTH_NAMES, formatShamsiDateParts } from '../utils';
 
-const iconMap: Record<string, keyof typeof Feather.glyphMap> = {
+const iconMap: Record<string, any> = {
   'credit-card': 'credit-card', monitor: 'monitor', gift: 'gift', coffee: 'coffee',
   truck: 'truck', 'shopping-bag': 'shopping-bag', home: 'home', 'file-text': 'file-text',
-  film: 'film', activity: 'activity', zap: 'zap', bus: 'bus', plane: 'plane',
+  film: 'film', activity: 'activity', zap: 'zap',
   phone: 'phone', heart: 'heart', circle: 'circle', book: 'book', briefcase: 'briefcase',
   camera: 'camera', cpu: 'cpu', headphones: 'headphones', 'map-pin': 'map-pin',
   music: 'music', server: 'server', smile: 'smile', star: 'star', sun: 'sun',
-  tv: 'tv', umbrella: 'umbrella', user: 'user',
+  tv: 'tv', umbrella: 'umbrella', user: 'user', 'trending-up': 'trending-up',
+  'dollar-sign': 'dollar-sign', archive: 'archive', target: 'target', flag: 'flag',
+  award: 'award', users: 'users', 'user-check': 'user-check', 'user-minus': 'user-minus',
+  'user-plus': 'user-plus', 'help-circle': 'help-circle', save: 'save',
 };
+
+type SettingTab = 'profile' | 'budgets' | 'categories' | 'backup' | 'goals' | 'debts' | 'security';
 
 export default function SettingsScreen() {
   const {
     budgets, setCategoryBudget, categories, addCategory, updateCategory, deleteCategory,
     userProfile, updateUserProfile, getBackupData, importBackup,
     transactions, reminders,
+    savingsGoals, addSavingsGoal, updateSavingsGoal, deleteSavingsGoal, contributeToGoal,
+    debts, addDebt, updateDebt, deleteDebt, payDebt,
+    appLock, setAppLock, accounts,
   } = useFinance();
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'budgets' | 'categories' | 'backup'>('profile');
+  const [activeTab, setActiveTab] = useState<SettingTab>('profile');
   const [catType, setCatType] = useState<TransactionType>('expense');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
@@ -41,6 +53,27 @@ export default function SettingsScreen() {
   const [newCatColor, setNewCatColor] = useState(COLOR_OPTIONS[0]);
   const [newCatParent, setNewCatParent] = useState<ParentCategoryType>('essentials');
 
+  const [isAddingGoal, setIsAddingGoal] = useState(false);
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+  const [goalName, setGoalName] = useState('');
+  const [goalTarget, setGoalTarget] = useState('');
+  const [goalColor, setGoalColor] = useState(COLOR_OPTIONS[0]);
+  const [goalIcon, setGoalIcon] = useState('target');
+  const [goalDeadlineMonth, setGoalDeadlineMonth] = useState('');
+  const [goalDeadlineYear, setGoalDeadlineYear] = useState('');
+  const [contributeAmount, setContributeAmount] = useState('');
+
+  const [isAddingDebt, setIsAddingDebt] = useState(false);
+  const [editingDebtId, setEditingDebtId] = useState<string | null>(null);
+  const [debtPerson, setDebtPerson] = useState('');
+  const [debtType, setDebtType] = useState<'loan' | 'debt'>('debt');
+  const [debtAmount, setDebtAmount] = useState('');
+  const [debtDesc, setDebtDesc] = useState('');
+  const [debtDueMonth, setDebtDueMonth] = useState('');
+  const [debtDueYear, setDebtDueYear] = useState('');
+  const [debtDueDay, setDebtDueDay] = useState('');
+  const [payDebtAmount, setPayDebtAmount] = useState('');
+
   const expenseCategories = categories.filter(c => c.type === 'expense');
 
   const handleExportBackup = async () => {
@@ -49,9 +82,7 @@ export default function SettingsScreen() {
       const jsonString = JSON.stringify(backupObj, null, 2);
       const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '_');
       const fileUri = FileSystem.documentDirectory + `finance_backup_${dateStr}.json`;
-
       await FileSystem.writeAsStringAsync(fileUri, jsonString, { encoding: FileSystem.EncodingType.UTF8 });
-
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri, { mimeType: 'application/json' });
       } else {
@@ -66,19 +97,17 @@ export default function SettingsScreen() {
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: 'application/json' });
       if (result.canceled) return;
-
       const file = result.assets[0];
       const content = await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.UTF8 });
       const parsed = JSON.parse(content);
       const success = importBackup(parsed);
-
       if (success) {
         setImportStatus({ type: 'success', message: 'اطلاعات با موفقیت بازگردانی شد!' });
       } else {
         setImportStatus({ type: 'error', message: 'فرمت فایل پشتیبان معتبر نیست.' });
       }
     } catch {
-      setImportStatus({ type: 'error', message: 'خطا در خواندن فایل. مطمئن شوید فایل انتخابی یک فایل JSON معتبر است.' });
+      setImportStatus({ type: 'error', message: 'خطا در خواندن فایل.' });
     }
   };
 
@@ -129,6 +158,83 @@ export default function SettingsScreen() {
     setIsAddingCat(true);
   };
 
+  const handleGoalSave = () => {
+    if (!goalName.trim() || !goalTarget) return;
+    const data = {
+      name: goalName.trim(),
+      targetAmount: Number(goalTarget.replace(/\D/g, '')),
+      currentAmount: 0,
+      deadlineYear: goalDeadlineYear ? Number(goalDeadlineYear) : undefined,
+      deadlineMonth: goalDeadlineMonth ? Number(goalDeadlineMonth) : undefined,
+      color: goalColor,
+      icon: goalIcon,
+      createdAt: new Date().toISOString(),
+    };
+    if (editingGoalId) {
+      updateSavingsGoal(editingGoalId, data);
+    } else {
+      addSavingsGoal(data);
+    }
+    resetGoalForm();
+  };
+
+  const resetGoalForm = () => {
+    setIsAddingGoal(false);
+    setEditingGoalId(null);
+    setGoalName('');
+    setGoalTarget('');
+    setGoalColor(COLOR_OPTIONS[0]);
+    setGoalIcon('target');
+    setGoalDeadlineMonth('');
+    setGoalDeadlineYear('');
+    setContributeAmount('');
+  };
+
+  const handleDebtSave = () => {
+    if (!debtPerson.trim() || !debtAmount) return;
+    const amt = Number(debtAmount.replace(/\D/g, ''));
+    const data = {
+      personName: debtPerson.trim(),
+      type: debtType,
+      amount: amt,
+      remainingAmount: amt,
+      description: debtDesc,
+      date: new Date().toISOString(),
+      dueYear: debtDueYear ? Number(debtDueYear) : undefined,
+      dueMonth: debtDueMonth ? Number(debtDueMonth) : undefined,
+      dueDay: debtDueDay ? Number(debtDueDay) : undefined,
+      isPaid: false,
+    };
+    if (editingDebtId) {
+      updateDebt(editingDebtId, data);
+    } else {
+      addDebt(data);
+    }
+    resetDebtForm();
+  };
+
+  const resetDebtForm = () => {
+    setIsAddingDebt(false);
+    setEditingDebtId(null);
+    setDebtPerson('');
+    setDebtType('debt');
+    setDebtAmount('');
+    setDebtDesc('');
+    setDebtDueMonth('');
+    setDebtDueYear('');
+    setDebtDueDay('');
+  };
+
+  const tabs: { key: SettingTab; label: string }[] = [
+    { key: 'profile', label: 'پروفایل' },
+    { key: 'budgets', label: 'بودجه' },
+    { key: 'categories', label: 'دسته‌ها' },
+    { key: 'goals', label: 'اهداف' },
+    { key: 'debts', label: 'بدهی‌ها' },
+    { key: 'backup', label: 'پشتیبان' },
+    { key: 'security', label: 'امنیت' },
+  ];
+
   const renderProfileTab = () => (
     <View style={{ gap: 20 }}>
       <View style={styles.avatarSection}>
@@ -158,10 +264,9 @@ export default function SettingsScreen() {
 
   const renderBudgetsTab = () => (
     <View style={{ gap: 24 }}>
-      <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>تعیین سقف هزینه برای دسته‌های اصلی و زیرمجموعه‌ها در ماه جاری.</Text>
-
+      <Text style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>تعیین سقف هزینه برای دسته‌های اصلی و زیرمجموعه‌ها.</Text>
       <View style={{ gap: 12 }}>
-        <Text style={styles.budgetSectionTitle}>بودجه‌بندی دسته‌های اصلی مادر</Text>
+        <Text style={styles.budgetSectionTitle}>دسته‌های اصلی</Text>
         {PARENT_CATEGORIES.map(pc => {
           const isEditing = editingId === pc.id;
           const currentBudget = budgets[pc.id] || 0;
@@ -192,27 +297,19 @@ export default function SettingsScreen() {
           );
         })}
       </View>
-
       <View style={{ gap: 12 }}>
-        <View style={styles.budgetSubHeader}>
-          <Text style={styles.budgetSectionTitle}>بودجه‌بندی زیرمجموعه‌ها</Text>
-          <View style={styles.budgetOptionalBadge}><Text style={{ fontSize: 10, color: '#9ca3af', fontFamily: 'Vazirmatn_500Medium' }}>اختیاری</Text></View>
-        </View>
+        <Text style={styles.budgetSectionTitle}>زیرمجموعه‌ها</Text>
         {expenseCategories.map(cat => {
           const isEditing = editingId === cat.id;
           const currentBudget = budgets[cat.id] || 0;
           const iconName = iconMap[cat.icon] || 'credit-card';
-          const parentName = PARENT_CATEGORIES.find(p => p.id === cat.parentCategoryId)?.name || 'سایر مخارج';
           return (
             <View key={cat.id} style={styles.budgetItem}>
               <View style={styles.budgetNameRow}>
                 <View style={[styles.budgetSubIcon, { backgroundColor: cat.color + '26' }]}>
                   <Feather name={iconName} size={18} color={cat.color} />
                 </View>
-                <View>
-                  <Text style={styles.budgetName}>{cat.name}</Text>
-                  <Text style={{ fontSize: 10, color: '#9ca3af' }}>{parentName}</Text>
-                </View>
+                <Text style={styles.budgetName}>{cat.name}</Text>
               </View>
               {isEditing ? (
                 <View style={styles.budgetEditRow}>
@@ -243,22 +340,19 @@ export default function SettingsScreen() {
       <View style={styles.catTypeToggle}>
         <TouchableOpacity style={[styles.catTypeBtn, catType === 'expense' && styles.catTypeBtnExpense]}
           onPress={() => setCatType('expense')}>
-          <Text style={[styles.catTypeBtnText, catType === 'expense' && { color: '#be123c' }]}>پرداختی (هزینه)</Text>
+          <Text style={[styles.catTypeBtnText, catType === 'expense' && { color: '#be123c' }]}>هزینه</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.catTypeBtn, catType === 'income' && styles.catTypeBtnIncome]}
           onPress={() => setCatType('income')}>
-          <Text style={[styles.catTypeBtnText, catType === 'income' && { color: '#047857' }]}>دریافتی (درآمد)</Text>
+          <Text style={[styles.catTypeBtnText, catType === 'income' && { color: '#047857' }]}>درآمد</Text>
         </TouchableOpacity>
       </View>
-
       <TouchableOpacity style={styles.addCatBtn} onPress={openAddCategory}>
         <Feather name="plus" size={20} color="#6b7280" />
         <Text style={{ color: '#6b7280', fontFamily: 'Vazirmatn_700Bold', fontSize: 14 }}>دسته‌بندی جدید</Text>
       </TouchableOpacity>
-
       {categories.filter(c => c.type === catType).map(cat => {
         const iconName = iconMap[cat.icon] || 'credit-card';
-        const parentName = cat.type === 'expense' ? PARENT_CATEGORIES.find(p => p.id === cat.parentCategoryId)?.name : null;
         return (
           <View key={cat.id} style={styles.catItem}>
             <TouchableOpacity style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}
@@ -266,10 +360,7 @@ export default function SettingsScreen() {
               <View style={[styles.catItemIcon, { backgroundColor: cat.color + '26' }]}>
                 <Feather name={iconName} size={22} color={cat.color} />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.catItemName}>{cat.name}</Text>
-                {parentName && <Text style={{ fontSize: 11, color: '#9ca3af', fontFamily: 'Vazirmatn_500Medium' }}>دسته اصلی: {parentName}</Text>}
-              </View>
+              <Text style={styles.catItemName}>{cat.name}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => deleteCategory(cat.id)} style={{ padding: 8 }}>
               <Feather name="trash-2" size={18} color="#f43f5e" />
@@ -280,31 +371,281 @@ export default function SettingsScreen() {
     </View>
   );
 
+  const renderGoalsTab = () => (
+    <View style={{ gap: 16 }}>
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionTitleSm}>اهداف پس‌انداز</Text>
+        <TouchableOpacity style={styles.smallAddBtn} onPress={() => { resetGoalForm(); setIsAddingGoal(true); }}>
+          <Feather name="plus" size={18} color="#fff" />
+        </TouchableOpacity>
+      </View>
+      {savingsGoals.length === 0 ? (
+        <View style={styles.emptySection}>
+          <Feather name="flag" size={40} color="#d1d5db" />
+          <Text style={{ color: '#9ca3af', fontSize: 13 }}>هنوز هدفی ثبت نشده</Text>
+        </View>
+      ) : (
+        savingsGoals.map(g => {
+          const pct = calculateGoalProgress(g.currentAmount, g.targetAmount);
+          const iconName = iconMap[g.icon] || 'flag';
+          return (
+            <View key={g.id} style={styles.goalCard}>
+              <View style={styles.goalHeader}>
+                <View style={styles.goalHeaderLeft}>
+                  <View style={[styles.goalIconBox, { backgroundColor: g.color + '20' }]}>
+                    <Feather name={iconName} size={24} color={g.color} />
+                  </View>
+                  <View>
+                    <Text style={styles.goalName}>{g.name}</Text>
+                    <Text style={styles.goalProgress}>{pct}% تکمیل</Text>
+                  </View>
+                </View>
+                <TouchableOpacity onPress={() => deleteSavingsGoal(g.id)}>
+                  <Feather name="trash-2" size={16} color="#d1d5db" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.goalBarBg}>
+                <View style={[styles.goalBarFill, { width: `${pct}%`, backgroundColor: g.color }]} />
+              </View>
+              <View style={styles.goalStats}>
+                <Text style={styles.goalStat}>{formatCurrency(g.currentAmount, true)}</Text>
+                <Text style={styles.goalStat}>از {formatCurrency(g.targetAmount, true)}</Text>
+              </View>
+              {g.currentAmount < g.targetAmount && (
+                <View style={styles.contributeRow}>
+                  <TextInput style={styles.contributeInput}
+                    value={contributeAmount} onChangeText={t => setContributeAmount(t.replace(/\D/g, ''))}
+                    placeholder="مبلغ" keyboardType="numeric" />
+                  <TouchableOpacity style={styles.contributeBtn} onPress={() => {
+                    const amt = Number(contributeAmount);
+                    if (amt > 0) { contributeToGoal(g.id, amt); setContributeAmount(''); }
+                  }}>
+                    <Text style={styles.contributeBtnText}>واریز</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {g.deadlineYear && g.deadlineMonth && (
+                <Text style={styles.goalDeadline}>مهلت: {formatShamsiDateParts(g.deadlineYear, g.deadlineMonth, 1)}</Text>
+              )}
+            </View>
+          );
+        })
+      )}
+
+      <Modal visible={isAddingGoal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingGoalId ? 'ویرایش هدف' : 'هدف جدید'}</Text>
+              <TouchableOpacity onPress={() => setIsAddingGoal(false)}>
+                <Feather name="x" size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={styles.modalBody}>
+              <Text style={styles.fieldLabel}>نام هدف</Text>
+              <TextInput style={styles.fieldInput} value={goalName} onChangeText={setGoalName} placeholder="مثال: خرید ماشین" />
+
+              <Text style={styles.fieldLabel}>مبلغ هدف (تومان)</Text>
+              <TextInput style={styles.fieldInput} value={goalTarget} onChangeText={t => setGoalTarget(t.replace(/\D/g, ''))}
+                placeholder="10000000" keyboardType="numeric" />
+
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>ماه مهلت (اختیاری)</Text>
+                  <TextInput style={styles.fieldInput} value={goalDeadlineMonth} onChangeText={t => setGoalDeadlineMonth(t.replace(/\D/g, ''))}
+                    placeholder="12" keyboardType="numeric" maxLength={2} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>سال مهلت (اختیاری)</Text>
+                  <TextInput style={styles.fieldInput} value={goalDeadlineYear} onChangeText={t => setGoalDeadlineYear(t.replace(/\D/g, ''))}
+                    placeholder="1405" keyboardType="numeric" maxLength={4} />
+                </View>
+              </View>
+
+              <Text style={styles.fieldLabel}>آیکون</Text>
+              <View style={styles.iconGrid}>
+                {GOAL_ICONS.map(iconStr => {
+                  const ic = iconMap[iconStr];
+                  return (
+                    <TouchableOpacity key={iconStr} style={[styles.iconOption, goalIcon === iconStr && { backgroundColor: goalColor + '20', borderColor: goalColor }]}
+                      onPress={() => setGoalIcon(iconStr)}>
+                      {ic && <Feather name={ic} size={24} color={goalIcon === iconStr ? goalColor : '#6b7280'} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.fieldLabel}>رنگ</Text>
+              <View style={styles.colorGrid}>
+                {COLOR_OPTIONS.map(c => (
+                  <TouchableOpacity key={c} style={[styles.colorOption, { backgroundColor: c }, goalColor === c && styles.colorActive]}
+                    onPress={() => setGoalColor(c)} />
+                ))}
+              </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleGoalSave}>
+                <Text style={styles.saveBtnText}>ذخیره هدف</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+
+  const renderDebtsTab = () => (
+    <View style={{ gap: 16 }}>
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionTitleSm}>بدهی‌ها و طلب‌ها</Text>
+        <TouchableOpacity style={styles.smallAddBtn} onPress={() => { resetDebtForm(); setIsAddingDebt(true); }}>
+          <Feather name="plus" size={18} color="#fff" />
+        </TouchableOpacity>
+      </View>
+      {debts.length === 0 ? (
+        <View style={styles.emptySection}>
+          <Feather name="users" size={40} color="#d1d5db" />
+          <Text style={{ color: '#9ca3af', fontSize: 13 }}>بدهی یا طلبی ثبت نشده</Text>
+        </View>
+      ) : (
+        debts.map(d => (
+          <View key={d.id} style={[styles.debtCard, d.isPaid && { opacity: 0.5, borderColor: '#10b981' }]}>
+            <View style={styles.debtHeader}>
+              <View style={styles.debtHeaderLeft}>
+                <View style={[styles.debtIconBox, { backgroundColor: d.type === 'loan' ? '#dbeafe' : '#fef3c7' }]}>
+                  <Feather name={d.type === 'loan' ? 'arrow-up-right' : 'arrow-down-left'} size={20}
+                    color={d.type === 'loan' ? '#2563eb' : '#f59e0b'} />
+                </View>
+                <View>
+                  <Text style={styles.debtPerson}>{d.personName}</Text>
+                  <Text style={styles.debtType}>{d.type === 'loan' ? 'قرض داده شده' : 'بدهی'}</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => deleteDebt(d.id)}>
+                <Feather name="trash-2" size={16} color="#d1d5db" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.debtAmounts}>
+              <Text style={[styles.debtAmountMain, d.isPaid && { color: '#10b981' }]}>
+                {formatCurrency(d.remainingAmount, true)}
+              </Text>
+              <Text style={styles.debtAmountTotal}>از {formatCurrency(d.amount, true)}</Text>
+            </View>
+            {d.description ? <Text style={styles.debtDesc}>{d.description}</Text> : null}
+            {d.dueYear && d.dueMonth && d.dueDay && (
+              <Text style={styles.debtDue}>سررسید: {formatShamsiDateParts(d.dueYear, d.dueMonth, d.dueDay)}</Text>
+            )}
+            {!d.isPaid && (
+              <View style={styles.payRow}>
+                <TextInput style={styles.payInput} value={payDebtAmount}
+                  onChangeText={t => setPayDebtAmount(t.replace(/\D/g, ''))}
+                  placeholder="مبلغ پرداخت" keyboardType="numeric" />
+                <TouchableOpacity style={styles.payBtn} onPress={() => {
+                  const amt = Number(payDebtAmount);
+                  if (amt > 0) { payDebt(d.id, amt); setPayDebtAmount(''); }
+                }}>
+                  <Text style={styles.payBtnText}>پرداخت</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {d.isPaid && (
+              <View style={styles.paidBadge}>
+                <Feather name="check-circle" size={14} color="#059669" />
+                <Text style={{ color: '#059669', fontSize: 11, fontFamily: 'Vazirmatn_700Bold' }}>تسویه شده</Text>
+              </View>
+            )}
+          </View>
+        ))
+      )}
+
+      <Modal visible={isAddingDebt} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingDebtId ? 'ویرایش' : 'ثبت بدهی/طلب'}</Text>
+              <TouchableOpacity onPress={() => setIsAddingDebt(false)}>
+                <Feather name="x" size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={styles.modalBody}>
+              <Text style={styles.fieldLabel}>نام طرف مقابل</Text>
+              <TextInput style={styles.fieldInput} value={debtPerson} onChangeText={setDebtPerson}
+                placeholder="مثال: علی رضایی" />
+
+              <View style={styles.typeToggle}>
+                <TouchableOpacity style={[styles.typeBtn, debtType === 'debt' && styles.typeBtnActiveDebt]}
+                  onPress={() => setDebtType('debt')}>
+                  <Text style={[styles.typeBtnTextSm, debtType === 'debt' && { color: '#f59e0b' }]}>بدهی (من بدهکارم)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.typeBtn, debtType === 'loan' && styles.typeBtnActiveLoan]}
+                  onPress={() => setDebtType('loan')}>
+                  <Text style={[styles.typeBtnTextSm, debtType === 'loan' && { color: '#2563eb' }]}>طلب (به من بدهکار)</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.fieldLabel}>مبلغ (تومان)</Text>
+              <TextInput style={styles.fieldInput} value={debtAmount}
+                onChangeText={t => setDebtAmount(t.replace(/\D/g, ''))}
+                placeholder="1000000" keyboardType="numeric" />
+
+              <Text style={styles.fieldLabel}>توضیحات (اختیاری)</Text>
+              <TextInput style={styles.fieldInput} value={debtDesc} onChangeText={setDebtDesc}
+                placeholder="مثال: قرض برای تعمیر ماشین" />
+
+              <Text style={styles.fieldLabel}>سررسید (اختیاری - شمسی)</Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <TextInput style={styles.fieldInput} value={debtDueYear} onChangeText={t => setDebtDueYear(t.replace(/\D/g, ''))}
+                    placeholder="سال" keyboardType="numeric" maxLength={4} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <TextInput style={styles.fieldInput} value={debtDueMonth} onChangeText={t => setDebtDueMonth(t.replace(/\D/g, ''))}
+                    placeholder="ماه" keyboardType="numeric" maxLength={2} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <TextInput style={styles.fieldInput} value={debtDueDay} onChangeText={t => setDebtDueDay(t.replace(/\D/g, ''))}
+                    placeholder="روز" keyboardType="numeric" maxLength={2} />
+                </View>
+              </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleDebtSave}>
+                <Text style={styles.saveBtnText}>ذخیره</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+
   const renderBackupTab = () => (
     <View style={{ gap: 24, paddingBottom: 40 }}>
       <View style={styles.backupIntroCard}>
         <View style={styles.backupIntroDeco} />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
           <Feather name="database" size={24} color="#bfdbfe" />
-          <Text style={{ fontFamily: 'Vazirmatn_700Bold', fontSize: 14, color: '#fff' }}>نسخه پشتیبان و همگام‌سازی</Text>
+          <Text style={{ fontFamily: 'Vazirmatn_700Bold', fontSize: 14, color: '#fff' }}>پشتیبان‌گیری و بازگردانی</Text>
         </View>
         <Text style={{ fontSize: 12, color: 'rgba(219,234,254,0.9)', lineHeight: 20 }}>
-          تمام تراکنش‌ها، دسته‌بندی‌ها، اهداف بودجه‌بندی و تنظیمات حساب شما به صورت آفلاین در این گوشی ذخیره می‌شوند.
+          تمام اطلاعات مالی شما به صورت آفلاین در این گوشی ذخیره می‌شوند.
         </Text>
       </View>
 
       <View style={styles.backupCard}>
         <View style={styles.backupCardHeader}>
           <Feather name="download" size={16} color="#2563eb" />
-          <Text style={{ fontFamily: 'Vazirmatn_700Bold', fontSize: 14, color: '#1f2937' }}>پشتیبان‌گیری (تهیه خروجی)</Text>
+          <Text style={{ fontFamily: 'Vazirmatn_700Bold', fontSize: 14, color: '#1f2937' }}>خروجی (پشتیبان‌گیری)</Text>
         </View>
-        <Text style={{ fontSize: 12, color: '#6b7280', lineHeight: 18 }}>یک فایل حاوی تمام اطلاعات مالی ثبت‌شده شما دانلود خواهد شد.</Text>
+        <Text style={{ fontSize: 12, color: '#6b7280', lineHeight: 18 }}>فایل JSON از تمام اطلاعات شما ساخته می‌شود.</Text>
         <View style={styles.backupStats}>
           {[
-            ['کل تراکنش‌ها:', transactions.length.toLocaleString('fa-IR')],
+            ['تراکنش‌ها:', transactions.length.toLocaleString('fa-IR')],
             ['دسته‌ها:', categories.length.toLocaleString('fa-IR')],
             ['بودجه‌ها:', Object.keys(budgets).length.toLocaleString('fa-IR')],
             ['یادآورها:', reminders.length.toLocaleString('fa-IR')],
+            ['حساب‌ها:', accounts.length.toLocaleString('fa-IR')],
+            ['اهداف:', savingsGoals.length.toLocaleString('fa-IR')],
           ].map(([label, value], i) => (
             <View key={i} style={styles.backupStatRow}>
               <Text style={{ color: '#6b7280', fontSize: 12 }}>{label}</Text>
@@ -314,206 +655,342 @@ export default function SettingsScreen() {
         </View>
         <TouchableOpacity style={styles.exportBtn} onPress={handleExportBackup}>
           <Feather name="download" size={16} color="#fff" />
-          <Text style={{ color: '#fff', fontFamily: 'Vazirmatn_700Bold', fontSize: 12 }}>دانلود فایل نسخه پشتیبان</Text>
+          <Text style={{ color: '#fff', fontFamily: 'Vazirmatn_700Bold', fontSize: 12 }}>دانلود فایل پشتیبان</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.backupCard}>
         <View style={styles.backupCardHeader}>
           <Feather name="upload" size={16} color="#4f46e5" />
-          <Text style={{ fontFamily: 'Vazirmatn_700Bold', fontSize: 14, color: '#1f2937' }}>بازگردانی اطلاعات (وارد کردن)</Text>
+          <Text style={{ fontFamily: 'Vazirmatn_700Bold', fontSize: 14, color: '#1f2937' }}>بازگردانی (وارد کردن)</Text>
         </View>
-        <Text style={{ fontSize: 12, color: '#6b7280', lineHeight: 18 }}>با آپلود فایل پشتیبان قبلی (فرمت .json)، اطلاعات شما جایگزین خواهند شد.</Text>
+        <Text style={{ fontSize: 12, color: '#6b7280', lineHeight: 18 }}>با آپلود فایل .json قبلی، اطلاعات جایگزین می‌شود.</Text>
         <TouchableOpacity style={styles.importBtn} onPress={handleImportBackup}>
           <Feather name="upload" size={24} color="#4f46e5" />
           <View>
-            <Text style={{ color: '#374151', fontFamily: 'Vazirmatn_700Bold', fontSize: 12 }}>کلیک کنید تا فایل انتخاب کنید</Text>
-            <Text style={{ color: '#9ca3af', fontSize: 10, marginTop: 2 }}>فرمت فایل باید حتماً .json باشد</Text>
+            <Text style={{ color: '#374151', fontFamily: 'Vazirmatn_700Bold', fontSize: 12 }}>انتخاب فایل</Text>
+            <Text style={{ color: '#9ca3af', fontSize: 10, marginTop: 2 }}>فقط .json</Text>
           </View>
         </TouchableOpacity>
-
         {importStatus.type && (
           <View style={[styles.importStatus, {
             backgroundColor: importStatus.type === 'success' ? '#ecfdf5' : '#fef2f2',
             borderColor: importStatus.type === 'success' ? '#a7f3d0' : '#fecaca',
           }]}>
-            <View style={[styles.importStatusDot, {
-              backgroundColor: importStatus.type === 'success' ? '#10b981' : '#ef4444',
-            }]} />
+            <View style={[styles.importStatusDot, { backgroundColor: importStatus.type === 'success' ? '#10b981' : '#ef4444' }]} />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.importStatusTitle, {
-                color: importStatus.type === 'success' ? '#064e3b' : '#991b1b',
-              }]}>
-                {importStatus.type === 'success' ? 'عملیات موفق' : 'عملیات ناموفق'}
+              <Text style={[styles.importStatusTitle, { color: importStatus.type === 'success' ? '#064e3b' : '#991b1b' }]}>
+                {importStatus.type === 'success' ? 'موفق' : 'ناموفق'}
               </Text>
               <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{importStatus.message}</Text>
             </View>
           </View>
         )}
       </View>
+
+      <View style={styles.backupCard}>
+        <View style={styles.backupCardHeader}>
+          <Feather name="cloud" size={16} color="#0ea5e9" />
+          <Text style={{ fontFamily: 'Vazirmatn_700Bold', fontSize: 14, color: '#1f2937' }}>پشتیبان‌گیری ابری (گوگل‌درایو)</Text>
+        </View>
+        <Text style={{ fontSize: 12, color: '#6b7280', lineHeight: 18 }}>
+          با ذخیره فایل پشتیبان در گوگل‌درایو، اطلاعات شما همیشه در امان خواهد بود.
+          فایل پشتیبان را بگیرید و در گوگل‌درایو خود آپلود کنید.
+        </Text>
+        <TouchableOpacity style={styles.cloudBtn} onPress={async () => {
+          const backupObj = getBackupData();
+          const jsonString = JSON.stringify(backupObj, null, 2);
+          const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '_');
+          const fileUri = FileSystem.documentDirectory + `finance_backup_${dateStr}.json`;
+          await FileSystem.writeAsStringAsync(fileUri, jsonString, { encoding: FileSystem.EncodingType.UTF8 });
+          if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(fileUri, { mimeType: 'application/json' });
+          }
+        }}>
+          <Feather name="upload-cloud" size={20} color="#0ea5e9" />
+          <Text style={{ color: '#0ea5e9', fontFamily: 'Vazirmatn_700Bold', fontSize: 12 }}>دریافت فایل و ذخیره در گوگل‌درایو</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
-  const renderAddCategory = () => {
-    const isEditing = editingCatId !== null;
-    return (
-    <Modal visible={isAddingCat} transparent animationType="slide">
-      <View style={styles.addCatOverlay}>
-        <View style={styles.addCatHeader}>
-          <Text style={{ fontSize: 18, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' }}>
-            {isEditing ? 'ویرایش دسته‌بندی' : 'ایجاد دسته‌بندی جدید'}
-          </Text>
-          <TouchableOpacity onPress={() => { setIsAddingCat(false); setEditingCatId(null); }}>
-            <Feather name="x" size={24} color="#6b7280" />
+  const renderSecurityTab = () => (
+    <View style={{ gap: 20 }}>
+      <View style={styles.secCard}>
+        <View style={styles.secRow}>
+          <View style={styles.secRowLeft}>
+            <Feather name="lock" size={20} color="#2563eb" />
+            <View>
+              <Text style={styles.secTitle}>قفل برنامه</Text>
+              <Text style={styles.secDesc}>با PIN از اطلاعات مالی خود محافظت کنید</Text>
+            </View>
+          </View>
+          <TouchableOpacity style={[styles.toggleSwitch, appLock.enabled && styles.toggleSwitchActive]}
+            onPress={() => setAppLock({ ...appLock, enabled: !appLock.enabled })}>
+            <View style={[styles.toggleKnob, appLock.enabled && styles.toggleKnobActive]} />
           </TouchableOpacity>
         </View>
-
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 24, gap: 24, paddingBottom: 120 }}>
+        {appLock.enabled && (
           <View>
-            <Text style={styles.fieldLabel}>نام دسته‌بندی</Text>
-            <TextInput style={styles.fieldInput} value={newCatName} onChangeText={setNewCatName}
-              placeholder="مثلاً: اقساط خودرو، تفریح..." />
+            <Text style={styles.fieldLabel}>PIN جدید (اختیاری - برای تغییر)</Text>
+            <TextInput style={styles.fieldInput} placeholder="PIN ۴ تا ۶ رقمی"
+              keyboardType="numeric" secureTextEntry maxLength={6}
+              onChangeText={t => { if (t.length >= 4) setAppLock({ ...appLock, pin: t }); }} />
           </View>
+        )}
+      </View>
 
-          {catType === 'expense' && (
-            <View style={{ gap: 12 }}>
-              <Text style={styles.fieldLabel}>دسته اصلی مادر</Text>
-              {PARENT_CATEGORIES.map(pc => (
-                <TouchableOpacity key={pc.id} style={[styles.parentSelect, newCatParent === pc.id && styles.parentSelectActive]}
-                  onPress={() => setNewCatParent(pc.id)}>
-                  <Text style={[styles.parentSelectText, newCatParent === pc.id && { color: '#1d4ed8', fontFamily: 'Vazirmatn_700Bold' }]}>{pc.name}</Text>
-                  {newCatParent === pc.id && <Feather name="check" size={18} color="#2563eb" />}
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          <View style={{ gap: 12 }}>
-            <Text style={styles.fieldLabel}>رنگ</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-              {COLOR_OPTIONS.map(color => (
-                <TouchableOpacity key={color} style={[styles.colorOption, { backgroundColor: color }, newCatColor === color && styles.colorOptionActive]}
-                  onPress={() => setNewCatColor(color)} />
-              ))}
+      <View style={styles.secCard}>
+        <View style={styles.secRow}>
+          <View style={styles.secRowLeft}>
+            <Feather name="smartphone" size={20} color="#2563eb" />
+            <View>
+              <Text style={styles.secTitle}>اثر انگشت / بیومتریک</Text>
+              <Text style={styles.secDesc}>ورود سریع با اثر انگشت</Text>
             </View>
           </View>
-
-          <View style={{ gap: 12 }}>
-            <Text style={styles.fieldLabel}>آیکون</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-              {CATEGORY_ICONS.map(iconStr => {
-                const IconComp = iconMap[iconStr];
-                const isSelected = newCatIcon === iconStr;
-                return (
-                  <TouchableOpacity key={iconStr} style={[styles.iconOption, isSelected && { backgroundColor: newCatColor + '20' }]}
-                    onPress={() => setNewCatIcon(iconStr)}>
-                    {IconComp && <Feather name={IconComp} size={22} color={isSelected ? newCatColor : '#6b7280'} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        </ScrollView>
-
-        <View style={styles.addCatFooter}>
-          <TouchableOpacity style={[styles.addCatSaveBtn, !newCatName.trim() && { backgroundColor: '#d1d5db' }]}
-            onPress={handleCreateCategory} disabled={!newCatName.trim()}>
-            <Text style={{ color: '#fff', fontFamily: 'Vazirmatn_700Bold', fontSize: 16 }}>{editingCatId ? 'بروزرسانی دسته‌بندی' : 'ذخیره دسته‌بندی'}</Text>
+          <TouchableOpacity style={[styles.toggleSwitch, appLock.useBiometric && styles.toggleSwitchActive]}
+            onPress={() => setAppLock({ ...appLock, useBiometric: !appLock.useBiometric })}>
+            <View style={[styles.toggleKnob, appLock.useBiometric && styles.toggleKnobActive]} />
           </TouchableOpacity>
         </View>
       </View>
-    </Modal>
+
+      <View style={styles.secInfoCard}>
+        <Feather name="info" size={16} color="#3b82f6" />
+        <Text style={{ fontSize: 12, color: '#1e40af', fontFamily: 'Vazirmatn_500Medium', flex: 1, lineHeight: 18 }}>
+          اطلاعات مالی شما فقط روی این دستگاه ذخیره می‌شود و جایی ارسال نمی‌گردد. قفل برنامه یک لایه امنیتی اضافی است.
+        </Text>
+      </View>
+    </View>
   );
-  };
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f1f5f9' }}>
       <View style={styles.settingsHeader}>
         <Text style={{ fontSize: 20, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' }}>تنظیمات</Text>
-        <View style={styles.tabBar}>
-          {(['profile', 'budgets', 'categories', 'backup'] as const).map(tab => (
-            <TouchableOpacity key={tab} style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]}
-              onPress={() => setActiveTab(tab)}>
-              <Text style={[styles.tabBtnText, activeTab === tab && styles.tabBtnTextActive]}>
-                {tab === 'profile' ? 'پروفایل' : tab === 'budgets' ? 'بودجه' : tab === 'categories' ? 'دسته‌ها' : 'پشتیبان‌گیری'}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScroll}>
+          {tabs.map(tab => (
+            <TouchableOpacity key={tab.key} style={[styles.tabBtn, activeTab === tab.key && styles.tabBtnActive]}
+              onPress={() => setActiveTab(tab.key)}>
+              <Text style={[styles.tabBtnText, activeTab === tab.key && styles.tabBtnTextActive]}>
+                {tab.label}
               </Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 24, paddingBottom: 140 }}>
         {activeTab === 'profile' && renderProfileTab()}
         {activeTab === 'budgets' && renderBudgetsTab()}
         {activeTab === 'categories' && renderCategoriesTab()}
+        {activeTab === 'goals' && renderGoalsTab()}
+        {activeTab === 'debts' && renderDebtsTab()}
         {activeTab === 'backup' && renderBackupTab()}
+        {activeTab === 'security' && renderSecurityTab()}
       </ScrollView>
-      {renderAddCategory()}
+
+      {isAddingCat && renderAddCategoryModal()}
     </View>
   );
+
+  function renderAddCategoryModal() {
+    const isEditing = editingCatId !== null;
+    return (
+      <Modal visible={isAddingCat} transparent animationType="slide">
+        <View style={styles.addCatOverlay}>
+          <View style={styles.addCatHeader}>
+            <Text style={{ fontSize: 18, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' }}>
+              {isEditing ? 'ویرایش دسته‌بندی' : 'دسته‌بندی جدید'}
+            </Text>
+            <TouchableOpacity onPress={() => { setIsAddingCat(false); setEditingCatId(null); }}>
+              <Feather name="x" size={24} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 24, gap: 24, paddingBottom: 120 }}>
+            <View>
+              <Text style={styles.fieldLabel}>نام</Text>
+              <TextInput style={styles.fieldInput} value={newCatName} onChangeText={setNewCatName} placeholder="مثلاً: اقساط خودرو" />
+            </View>
+            {catType === 'expense' && (
+              <View style={{ gap: 12 }}>
+                <Text style={styles.fieldLabel}>دسته اصلی</Text>
+                {PARENT_CATEGORIES.map(pc => (
+                  <TouchableOpacity key={pc.id} style={[styles.parentSelect, newCatParent === pc.id && styles.parentSelectActive]}
+                    onPress={() => setNewCatParent(pc.id)}>
+                    <Text style={[styles.parentSelectText, newCatParent === pc.id && { color: '#1d4ed8', fontFamily: 'Vazirmatn_700Bold' }]}>{pc.name}</Text>
+                    {newCatParent === pc.id && <Feather name="check" size={18} color="#2563eb" />}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <View style={{ gap: 12 }}>
+              <Text style={styles.fieldLabel}>رنگ</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                {COLOR_OPTIONS.map(color => (
+                  <TouchableOpacity key={color} style={[styles.colorOption, { backgroundColor: color }, newCatColor === color && styles.colorOptionActive]}
+                    onPress={() => setNewCatColor(color)} />
+                ))}
+              </View>
+            </View>
+            <View style={{ gap: 12 }}>
+              <Text style={styles.fieldLabel}>آیکون</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                {CATEGORY_ICONS.map(iconStr => {
+                  const ic = iconMap[iconStr];
+                  return (
+                    <TouchableOpacity key={iconStr} style={[styles.iconOption, newCatIcon === iconStr && { backgroundColor: newCatColor + '20' }]}
+                      onPress={() => setNewCatIcon(iconStr)}>
+                      {ic && <Feather name={ic} size={22} color={newCatIcon === iconStr ? newCatColor : '#6b7280'} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </ScrollView>
+          <View style={styles.addCatFooter}>
+            <TouchableOpacity style={[styles.addCatSaveBtn, !newCatName.trim() && { backgroundColor: '#d1d5db' }]}
+              onPress={handleCreateCategory} disabled={!newCatName.trim()}>
+              <Text style={{ color: '#fff', fontFamily: 'Vazirmatn_700Bold', fontSize: 16 }}>
+                {editingCatId ? 'بروزرسانی' : 'ذخیره'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 }
 
 const styles = StyleSheet.create({
-  settingsHeader: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#f1f5f9', paddingTop: 48, paddingHorizontal: 24, paddingBottom: 8},
-  tabBar: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', backgroundColor: '#e5e7eb', borderRadius: 16, padding: 4, marginTop: 16, gap: 4},
-  tabBtn: { fontFamily: 'Vazirmatn_400Regular', flex: 1, paddingVertical: 8, borderRadius: 12, alignItems: 'center'},
-  tabBtnActive: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff'},
-  tabBtnText: { fontSize: 11, fontFamily: 'Vazirmatn_700Bold', color: '#6b7280' },
-  tabBtnTextActive: { color: '#1f2937'},
+  settingsHeader: { backgroundColor: '#f1f5f9', paddingTop: 48, paddingHorizontal: 24, paddingBottom: 8},
+  tabScroll: { flexDirection: 'row', gap: 8, paddingVertical: 12 },
+  tabBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#e5e7eb' },
+  tabBtnActive: { backgroundColor: '#2563eb' },
+  tabBtnText: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#6b7280' },
+  tabBtnTextActive: { color: '#fff' },
 
-  avatarSection: { fontFamily: 'Vazirmatn_400Regular', alignItems: 'center', gap: 12, marginBottom: 8},
-  avatarBig: { fontFamily: 'Vazirmatn_400Regular', width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(219,234,254,0.5)', alignItems: 'center', justifyContent: 'center', borderWidth: 4, borderColor: '#fff'},
+  avatarSection: { alignItems: 'center', gap: 12, marginBottom: 8},
+  avatarBig: { width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(219,234,254,0.5)', alignItems: 'center', justifyContent: 'center', borderWidth: 4, borderColor: '#fff'},
   fieldLabel: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937', marginBottom: 8 },
   fieldInput: { backgroundColor: '#fff', borderRadius: 12, padding: 12, fontSize: 14, fontFamily: 'Vazirmatn_500Medium', borderWidth: 1, borderColor: '#e5e7eb' },
-  saveProfileBtn: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#2563eb', borderRadius: 12, paddingVertical: 14, alignItems: 'center', shadowColor: '#2563eb', shadowOffset: { width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
+  saveProfileBtn: { backgroundColor: '#2563eb', borderRadius: 12, paddingVertical: 14, alignItems: 'center', shadowColor: '#2563eb', shadowOffset: { width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
   saveProfileBtnText: { color: '#fff', fontFamily: 'Vazirmatn_700Bold', fontSize: 14 },
 
-  budgetSectionTitle: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937', borderLeftWidth: 4, borderLeftColor: '#3b82f6', paddingLeft: 8 },
-  budgetSubHeader: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 8},
-  budgetOptionalBadge: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: 'rgba(229,231,235,0.6)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12},
-  budgetItem: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#f3f4f6'},
-  budgetNameRow: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1},
-  budgetDot: { fontFamily: 'Vazirmatn_400Regular', width: 24, height: 24, borderRadius: 12},
-  budgetSubIcon: { fontFamily: 'Vazirmatn_400Regular', width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center'},
+  budgetSectionTitle: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937', borderLeftWidth: 4, borderLeftColor: '#3b82f6', paddingLeft: 8, marginBottom: 8 },
+  budgetItem: { backgroundColor: '#fff', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#f3f4f6'},
+  budgetNameRow: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1},
+  budgetDot: { width: 24, height: 24, borderRadius: 12},
+  budgetSubIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center'},
   budgetName: { fontSize: 13, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
-  budgetEditRow: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 8},
+  budgetEditRow: { flexDirection: 'row', alignItems: 'center', gap: 8},
   budgetInput: { backgroundColor: '#f9fafb', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, fontFamily: 'Vazirmatn_700Bold', borderWidth: 1, borderColor: '#e5e7eb', textAlign: 'left', minWidth: 80 },
-  budgetCheck: { fontFamily: 'Vazirmatn_400Regular', padding: 8, backgroundColor: '#eff6ff', borderRadius: 12},
-  budgetValue: { fontFamily: 'Vazirmatn_400Regular', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: '#f9fafb'},
-  budgetValueSet: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe'},
+  budgetCheck: { padding: 8, backgroundColor: '#eff6ff', borderRadius: 12},
+  budgetValue: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: '#f9fafb'},
+  budgetValueSet: { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe'},
   budgetValueText: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#9ca3af' },
 
-  catTypeToggle: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', backgroundColor: '#fff', borderRadius: 12, padding: 4, borderWidth: 1, borderColor: '#e5e7eb'},
-  catTypeBtn: { fontFamily: 'Vazirmatn_400Regular', flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center'},
-  catTypeBtnExpense: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#ffe4e6'},
-  catTypeBtnIncome: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#d1fae5'},
+  catTypeToggle: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 12, padding: 4, borderWidth: 1, borderColor: '#e5e7eb'},
+  catTypeBtn: { flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center'},
+  catTypeBtnExpense: { backgroundColor: '#ffe4e6'},
+  catTypeBtnIncome: { backgroundColor: '#d1fae5'},
   catTypeBtnText: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#6b7280' },
-  addCatBtn: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: '#d1d5db', borderRadius: 16},
-  catItem: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', padding: 12, borderRadius: 16, borderWidth: 1, borderColor: '#f3f4f6'},
-  catItemLeft: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 12},
-  catItemIcon: { fontFamily: 'Vazirmatn_400Regular', width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center'},
+  addCatBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: '#d1d5db', borderRadius: 16},
+  catItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', padding: 12, borderRadius: 16, borderWidth: 1, borderColor: '#f3f4f6'},
+  catItemIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center'},
   catItemName: { fontSize: 15, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
 
-  backupIntroCard: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#4f46e5', borderRadius: 24, padding: 20, overflow: 'hidden'},
-  backupIntroDeco: { fontFamily: 'Vazirmatn_400Regular', position: 'absolute', right: 0, bottom: 0, width: 128, height: 128, borderRadius: 64, backgroundColor: 'rgba(255,255,255,0.05)'},
-  backupCard: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#fff', borderRadius: 24, padding: 20, borderWidth: 1, borderColor: '#f3f4f6', gap: 16},
-  backupCardHeader: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'center', gap: 8},
-  backupStats: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: 'rgba(249,250,251,0.8)', borderRadius: 16, padding: 16, gap: 12},
-  backupStatRow: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(243,244,246,0.5)', paddingBottom: 8},
-  exportBtn: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#2563eb', borderRadius: 16, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8},
-  importBtn: { fontFamily: 'Vazirmatn_400Regular', borderWidth: 2, borderStyle: 'dashed', borderColor: '#d1d5db', borderRadius: 24, padding: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: 'rgba(249,250,251,0.5)'},
-  importStatus: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 16, borderRadius: 16, borderWidth: 1},
-  importStatusDot: { fontFamily: 'Vazirmatn_400Regular', width: 20, height: 20, borderRadius: 10, marginTop: 2},
-  importStatusTitle: { fontFamily: 'Vazirmatn_700Bold', fontSize: 12 },
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  sectionTitleSm: { fontSize: 16, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
+  smallAddBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#2563eb', alignItems: 'center', justifyContent: 'center' },
+  emptySection: { alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderStyle: 'dashed', borderColor: '#e5e7eb' },
 
-  addCatOverlay: { fontFamily: 'Vazirmatn_400Regular', flex: 1, backgroundColor: '#fff'},
-  addCatHeader: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 48, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6'},
-  parentSelect: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 16, borderWidth: 2, borderColor: '#f3f4f6', backgroundColor: '#f9fafb'},
-  parentSelectActive: { fontFamily: 'Vazirmatn_400Regular', borderColor: '#3b82f6', backgroundColor: 'rgba(239,246,255,0.5)'},
+  goalCard: { backgroundColor: '#fff', borderRadius: 20, padding: 20, gap: 12, borderWidth: 1, borderColor: '#f3f4f6' },
+  goalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  goalHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  goalIconBox: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  goalName: { fontSize: 16, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
+  goalProgress: { fontSize: 12, color: '#6b7280', fontFamily: 'Vazirmatn_500Medium', marginTop: 2 },
+  goalBarBg: { height: 12, borderRadius: 6, backgroundColor: '#f3f4f6', overflow: 'hidden' },
+  goalBarFill: { height: 12, borderRadius: 6 },
+  goalStats: { flexDirection: 'row', justifyContent: 'space-between' },
+  goalStat: { fontSize: 13, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
+  goalDeadline: { fontSize: 11, color: '#9ca3af', fontFamily: 'Vazirmatn_500Medium' },
+  contributeRow: { flexDirection: 'row', gap: 8 },
+  contributeInput: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, fontFamily: 'Vazirmatn_700Bold', borderWidth: 1, borderColor: '#e5e7eb' },
+  contributeBtn: { backgroundColor: '#059669', borderRadius: 12, paddingHorizontal: 20, justifyContent: 'center' },
+  contributeBtnText: { color: '#fff', fontFamily: 'Vazirmatn_700Bold', fontSize: 12 },
+
+  debtCard: { backgroundColor: '#fff', borderRadius: 20, padding: 20, gap: 12, borderWidth: 1, borderColor: '#f3f4f6' },
+  debtHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  debtHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  debtIconBox: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  debtPerson: { fontSize: 16, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
+  debtType: { fontSize: 11, color: '#6b7280', fontFamily: 'Vazirmatn_500Medium', marginTop: 2 },
+  debtAmounts: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  debtAmountMain: { fontSize: 22, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
+  debtAmountTotal: { fontSize: 12, color: '#9ca3af', fontFamily: 'Vazirmatn_500Medium' },
+  debtDesc: { fontSize: 12, color: '#6b7280', fontFamily: 'Vazirmatn_500Medium' },
+  debtDue: { fontSize: 11, color: '#f59e0b', fontFamily: 'Vazirmatn_500Medium' },
+  payRow: { flexDirection: 'row', gap: 8 },
+  payInput: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, fontFamily: 'Vazirmatn_700Bold', borderWidth: 1, borderColor: '#e5e7eb' },
+  payBtn: { backgroundColor: '#2563eb', borderRadius: 12, paddingHorizontal: 20, justifyContent: 'center' },
+  payBtnText: { color: '#fff', fontFamily: 'Vazirmatn_700Bold', fontSize: 12 },
+  paidBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: '#d1fae5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+
+  typeToggle: { flexDirection: 'row', backgroundColor: '#f3f4f6', borderRadius: 12, padding: 4 },
+  typeBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  typeBtnActiveDebt: { backgroundColor: '#fffbeb' },
+  typeBtnActiveLoan: { backgroundColor: '#eff6ff' },
+  typeBtnTextSm: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#6b7280' },
+
+  backupIntroCard: { backgroundColor: '#4f46e5', borderRadius: 24, padding: 20, overflow: 'hidden'},
+  backupIntroDeco: { position: 'absolute', right: 0, bottom: 0, width: 128, height: 128, borderRadius: 64, backgroundColor: 'rgba(255,255,255,0.05)'},
+  backupCard: { backgroundColor: '#fff', borderRadius: 24, padding: 20, borderWidth: 1, borderColor: '#f3f4f6', gap: 16},
+  backupCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8},
+  backupStats: { backgroundColor: 'rgba(249,250,251,0.8)', borderRadius: 16, padding: 16, gap: 12},
+  backupStatRow: { flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(243,244,246,0.5)', paddingBottom: 8},
+  exportBtn: { backgroundColor: '#2563eb', borderRadius: 16, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8},
+  importBtn: { borderWidth: 2, borderStyle: 'dashed', borderColor: '#d1d5db', borderRadius: 24, padding: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12},
+  importStatus: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 16, borderRadius: 16, borderWidth: 1},
+  importStatusDot: { width: 20, height: 20, borderRadius: 10, marginTop: 2},
+  importStatusTitle: { fontFamily: 'Vazirmatn_700Bold', fontSize: 12 },
+  cloudBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderWidth: 1, borderColor: '#bae6fd', borderRadius: 16, backgroundColor: '#f0f9ff' },
+
+  secCard: { backgroundColor: '#fff', borderRadius: 20, padding: 20, gap: 16, borderWidth: 1, borderColor: '#f3f4f6' },
+  secRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  secRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  secTitle: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
+  secDesc: { fontSize: 11, color: '#6b7280', fontFamily: 'Vazirmatn_500Medium', marginTop: 2 },
+  toggleSwitch: { width: 48, height: 28, borderRadius: 14, backgroundColor: '#d1d5db', justifyContent: 'center', paddingHorizontal: 2 },
+  toggleSwitchActive: { backgroundColor: '#2563eb' },
+  toggleKnob: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#fff' },
+  toggleKnobActive: { alignSelf: 'flex-end' },
+  secInfoCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: '#eff6ff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#bfdbfe' },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' },
+  modalContainer: { flex: 1, backgroundColor: '#fff', marginTop: 80, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 24, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  modalTitle: { fontSize: 18, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
+  modalBody: { padding: 24, gap: 20, paddingBottom: 120 },
+  modalFooter: { position: 'absolute', bottom: 0, width: '100%', padding: 24, paddingBottom: 32 },
+  saveBtn: { backgroundColor: '#111827', borderRadius: 24, paddingVertical: 16, alignItems: 'center' },
+  saveBtnText: { color: '#fff', fontFamily: 'Vazirmatn_700Bold', fontSize: 16 },
+
+  iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  iconOption: { width: 52, height: 52, borderRadius: 16, backgroundColor: '#f9fafb', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent' },
+  colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  colorOption: { width: 36, height: 36, borderRadius: 18 },
+  colorActive: { borderWidth: 3, borderColor: '#1f2937', transform: [{ scale: 1.15 }] },
+
+  parentSelect: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 16, borderWidth: 2, borderColor: '#f3f4f6', backgroundColor: '#f9fafb'},
+  parentSelectActive: { borderColor: '#3b82f6', backgroundColor: 'rgba(239,246,255,0.5)'},
   parentSelectText: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#6b7280' },
-  colorOption: { fontFamily: 'Vazirmatn_400Regular', width: 40, height: 40, borderRadius: 20},
-  colorOptionActive: { fontFamily: 'Vazirmatn_400Regular', borderWidth: 3, borderColor: '#1f2937', transform: [{ scale: 1.1}] },
-  iconOption: { fontFamily: 'Vazirmatn_400Regular', width: 52, height: 52, borderRadius: 16, backgroundColor: '#f9fafb', alignItems: 'center', justifyContent: 'center'},
-  addCatFooter: { fontFamily: 'Vazirmatn_400Regular', position: 'absolute', bottom: 0, width: '100%', padding: 24, paddingBottom: 32},
-  addCatSaveBtn: { fontFamily: 'Vazirmatn_400Regular', backgroundColor: '#111827', borderRadius: 24, paddingVertical: 16, alignItems: 'center'},
+  colorOptionActive: { borderWidth: 3, borderColor: '#1f2937', transform: [{ scale: 1.1}] },
+
+  addCatOverlay: { flex: 1, backgroundColor: '#fff'},
+  addCatHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 48, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6'},
+  addCatFooter: { position: 'absolute', bottom: 0, width: '100%', padding: 24, paddingBottom: 32},
+  addCatSaveBtn: { backgroundColor: '#111827', borderRadius: 24, paddingVertical: 16, alignItems: 'center'},
 });

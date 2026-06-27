@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, StatusBar, I18nManager } from 'react-native';
 
 I18nManager.allowRTL(true);
@@ -23,12 +23,19 @@ import ReportsScreen from './src/screens/ReportsScreen';
 import AddScreen from './src/screens/AddScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import RemindersScreen from './src/screens/RemindersScreen';
+import AccountsScreen from './src/screens/AccountsScreen';
+import LockScreen from './src/screens/LockScreen';
 
-type ViewName = 'home' | 'reports' | 'add' | 'settings' | 'reminders';
+type ViewName = 'home' | 'accounts' | 'reports' | 'add' | 'settings' | 'reminders';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<ViewName>('home');
-  const { isLoaded } = useFinance();
+  const { isLoaded, appLock } = useFinance();
+  const [isUnlocked, setIsUnlocked] = useState(false);
+
+  useEffect(() => {
+    if (isLoaded && !appLock.enabled) setIsUnlocked(true);
+  }, [isLoaded, appLock.enabled]);
 
   if (!isLoaded) {
     return (
@@ -39,10 +46,15 @@ function AppContent() {
     );
   }
 
+  if (!isUnlocked) {
+    return <LockScreen onUnlock={() => setIsUnlocked(true)} />;
+  }
+
   return (
     <View style={styles.appContainer}>
       <View style={styles.contentArea}>
         {currentView === 'home' && <HomeScreen onEdit={() => setCurrentView('add')} />}
+        {currentView === 'accounts' && <AccountsScreen />}
         {currentView === 'reports' && <ReportsScreen />}
         {currentView === 'settings' && <SettingsScreen />}
         {currentView === 'reminders' && <RemindersScreen />}
@@ -73,8 +85,8 @@ export default function App() {
   });
 
   if (fontsLoaded) {
-    Text.defaultProps = Text.defaultProps || {};
-    (Text.defaultProps as any).style = { fontFamily: 'Vazirmatn_400Regular' };
+    (Text as any).defaultProps = (Text as any).defaultProps || {};
+    (Text as any).defaultProps.style = { fontFamily: 'Vazirmatn_400Regular' };
   }
 
   if (!fontsLoaded) {

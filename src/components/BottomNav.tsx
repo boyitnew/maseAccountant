@@ -2,47 +2,39 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
-export type ViewName = 'home' | 'reports' | 'add' | 'settings' | 'reminders';
+export type ViewName = 'home' | 'accounts' | 'reports' | 'add' | 'settings' | 'reminders';
 
 interface BottomNavProps {
   currentView: ViewName;
   onChange: (view: ViewName) => void;
 }
 
-const tabs: { fontFamily: 'Vazirmatn_400Regular', key: ViewName; label: string; icon: keyof typeof Feather.glyphMap}[] = [
-  { key: 'home', label: 'خانه', icon: 'home' },
-  { key: 'reports', label: 'گزارش‌ها', icon: 'pie-chart' },
-  { key: 'add', label: '', icon: 'plus' },
-  { key: 'reminders', label: 'یادآور', icon: 'bell' },
-  { key: 'settings', label: 'تنظیمات', icon: 'settings' },
-];
-
 export default function BottomNav({ currentView, onChange }: BottomNavProps) {
   return (
     <View style={styles.container}>
       <View style={styles.inner}>
         <TouchableOpacity style={styles.tab} onPress={() => onChange('home')}>
-          <Feather name="home" size={24} color={currentView === 'home' ? '#2563eb' : '#9ca3af'} />
+          <Feather name="home" size={22} color={currentView === 'home' ? '#2563eb' : '#9ca3af'} />
           <Text style={[styles.label, currentView === 'home' && styles.activeLabel]}>خانه</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tab} onPress={() => onChange('reports')}>
-          <Feather name="pie-chart" size={24} color={currentView === 'reports' ? '#2563eb' : '#9ca3af'} />
-          <Text style={[styles.label, currentView === 'reports' && styles.activeLabel]}>گزارش‌ها</Text>
+        <TouchableOpacity style={styles.tab} onPress={() => onChange('accounts')}>
+          <Feather name="layers" size={22} color={currentView === 'accounts' ? '#2563eb' : '#9ca3af'} />
+          <Text style={[styles.label, currentView === 'accounts' && styles.activeLabel]}>حساب‌ها</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.addButton} onPress={() => onChange('add')} activeOpacity={0.8}>
           <Feather name="plus" size={32} color="#fff" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tab} onPress={() => onChange('reminders')}>
-          <Feather name="bell" size={24} color={currentView === 'reminders' ? '#2563eb' : '#9ca3af'} />
-          <Text style={[styles.label, currentView === 'reminders' && styles.activeLabel]}>یادآور</Text>
+        <TouchableOpacity style={styles.tab} onPress={() => onChange('reports')}>
+          <Feather name="pie-chart" size={22} color={currentView === 'reports' ? '#2563eb' : '#9ca3af'} />
+          <Text style={[styles.label, currentView === 'reports' && styles.activeLabel]}>گزارش‌ها</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.tab} onPress={() => onChange('settings')}>
-          <Feather name="settings" size={24} color={currentView === 'settings' ? '#2563eb' : '#9ca3af'} />
-          <Text style={[styles.label, currentView === 'settings' && styles.activeLabel]}>تنظیمات</Text>
+          <Feather name="settings" size={22} color={currentView === 'settings' ? '#2563eb' : '#9ca3af'} />
+          <Text style={[styles.label, currentView === 'settings' && styles.activeLabel]}>بیشتر</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -50,7 +42,8 @@ export default function BottomNav({ currentView, onChange }: BottomNavProps) {
 }
 
 const styles = StyleSheet.create({
-  container: { fontFamily: 'Vazirmatn_400Regular', position: 'absolute',
+  container: {
+    position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
@@ -64,24 +57,30 @@ const styles = StyleSheet.create({
     elevation: 10,
     zIndex: 50,
   },
-  inner: { fontFamily: 'Vazirmatn_400Regular', flexDirection: 'row',
+  inner: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: 12,
-    paddingBottom: 24,},
-  tab: { fontFamily: 'Vazirmatn_400Regular', alignItems: 'center',
-    gap: 4,
-    padding: 8,},
+    paddingBottom: 24,
+  },
+  tab: {
+    alignItems: 'center',
+    gap: 2,
+    padding: 6,
+    minWidth: 52,
+  },
   label: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: 'Vazirmatn_500Medium',
     color: '#9ca3af',
   },
-  activeLabel: { color: '#2563eb',},
-  addButton: { fontFamily: 'Vazirmatn_400Regular', width: 64,
-    height: 64,
-    borderRadius: 32,
+  activeLabel: { color: '#2563eb' },
+  addButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#2563eb',
     alignItems: 'center',
     justifyContent: 'center',
