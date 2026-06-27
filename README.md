@@ -81,10 +81,81 @@ GitHub Actions is currently disabled for this repo. Releases are built locally a
 ### Prerequisites / پیش‌نیازها
 - Node.js 20+
 - Java 17+
-- Android SDK (with NDK 27.3+ and CMake 3.30+)
+- Android SDK (with NDK 27.3+ and CMake 3.22.1+)
 - An Android device or emulator
 
-### Build APK & AAB / ساخت APK و AAB
+### Known Build Issues / مشکلات شناخته شده بیلد
+
+#### 1. NDK Version Mismatch / عدم تطابق نسخه NDK
+
+**Problem:** Expo 52 + React Native 0.76.7 may request NDK 26.1.10909125, but your system may have a different version.
+
+**Solution:** In `android/build.gradle`, change `ndkVersion` to match your installed NDK:
+
+```groovy
+// Before (default from Expo)
+ndkVersion = "26.1.10909125"
+
+// After (change to your installed version)
+ndkVersion = "27.3.13750724"
+```
+
+To find your installed NDK version:
+```bash
+ls C:/Android/android-sdk/ndk/
+```
+
+#### 2. Read-Only SDK Directory / دایرکتوری SDK قابل نوشتن نیست
+
+**Problem:** If the Android SDK is installed in a read-only location (e.g. `C:\Android\android-sdk`), CMake cannot be installed there automatically, causing errors like:
+```
+The SDK directory is not writable: C:\Android\android-sdk
+```
+
+**Solution:** Install CMake in a writable temporary directory and point `cmake.dir` to it:
+
+```bash
+# Install CMake 3.22.1 in a temp directory
+sdkmanager --sdk_root=C:\path\to\writable\temp\android_sdk_temp "cmake;3.22.1"
+```
+
+Then set in `android/local.properties`:
+```properties
+sdk.dir=C:/Android/android-sdk
+cmake.dir=C:/path/to/writable/temp/android_sdk_temp/cmake/3.22.1
+ndk.dir=C:/Android/android-sdk/ndk/27.3.13750724
+```
+
+Also set the environment variable:
+```powershell
+$env:CMAKE_VERSION = "3.22.1"
+```
+
+> **Why CMake 3.22.1?** The `react-native-screens` module specifically requires this version. Newer versions like 3.31.5 may not be compatible.
+
+#### 3. Build Hangs or Gets Interrupted / بیلد قطع شدن
+
+**Problem:** The C++ (native) compilation phase can take 20-30 minutes on the first build. If the build process gets interrupted (timeout, terminal close, etc.), zombie Java processes may remain and block future builds.
+
+**Symptoms:**
+- `build_stacktrace_targets.txt` shows `java.lang.InterruptedException`
+- Java processes remain running with no progress
+- The build log stops updating for long periods
+
+**Solution:**
+```bash
+# Kill stale Java processes
+Get-Process -Name "java" | Stop-Process -Force
+
+# Clean the build
+cd android
+./gradlew clean
+
+# Re-run the build (first build takes ~25 min)
+./gradlew assembleRelease
+```
+
+### Build APK / ساخت APK
 
 ```bash
 # 1. Clone / کلون کردن
@@ -97,44 +168,47 @@ npm ci
 # 3. Generate Android project / تولید پروژه اندروید
 npx expo prebuild --platform android --clean
 
-# 4. Build APK / ساخت APK
+# 4. Update NDK version in android/build.gradle if needed
+#    (change ndkVersion to match your installed NDK)
+
+# 5. Set up local.properties if SDK is read-only
+#    (see section 2 above)
+
+# 6. Build APK / ساخت APK
 cd android
-$env:CMAKE_VERSION = "3.31.5"  # Windows PowerShell
-# export CMAKE_VERSION=3.31.5  # Linux/macOS
+$env:CMAKE_VERSION = "3.22.1"   # Windows PowerShell
 ./gradlew assembleRelease
 
-# 5. Build AAB for Google Play / ساخت AAB برای گوگل پلی
+# 7. (Optional) Build AAB for Google Play / ساخت AAB برای گوگل پلی
 ./gradlew bundleRelease
 
 # Outputs:
-# APK: android/app/build/outputs/apk/release/*.apk
+# APK: android/app/build/outputs/apk/release/app-release.apk
 # AAB: android/app/build/outputs/bundle/release/app-release.aab
 ```
 
-> **Note:** On environments with read-only SDK, set `local.properties`:
-> ```
-> sdk.dir=C:/Android/android-sdk
-> cmake.dir=C:/Android/android-sdk/cmake/3.31.5
-> ndk.dir=C:/Android/android-sdk/ndk/27.3.13750724
-> ```
-> Also set `CMAKE_VERSION` environment variable to match your installed CMake version.
+### Troubleshooting Checklist / چک‌لیست رفع خطا
+
+If the build fails, check in order:
+
+1. **NDK version** — `android/build.gradle` → `ndkVersion` must match installed NDK
+2. **CMake version** — `local.properties` → `cmake.dir` must point to CMake 3.22.1
+3. **Environment variable** — `$env:CMAKE_VERSION` must match the cmake.dir version
+4. **Stale processes** — Kill any leftover Java/Gradle processes before retrying
+5. **Clean build** — Run `./gradlew clean` before retrying
+6. **Build log** — Check `android/build.log` and `android/app/build/intermediates/cxx/*/logs/` for errors
 
 ### Output Files / فایل‌های خروجی
 
 | File | Size | Description |
 |---|---|---|
-| `app-arm64-v8a-release.apk` | ~32 MB | **Recommended for modern phones** (2020+) |
-| `app-armeabi-v7a-release.apk` | ~27 MB | Older phones (pre-2020) |
-| `app-x86_64-release.apk` | ~32 MB | 64-bit emulators |
-| `app-x86-release.apk` | ~33 MB | 32-bit emulators |
-| `app-universal-release.apk` | ~78 MB | All architectures in one |
-| `app-release.aab` | ~52 MB | Google Play submission |
+| `app-release.apk` | ~78 MB | Universal APK (all architectures) |
 
 ---
 
 ## Download APK / دانلود APK
 
-Go to [Releases](https://github.com/boyitnew/maseAccountant/releases) page and download the latest APK for your device architecture.
+Go to [Releases](https://github.com/boyitnew/maseAccountant/releases) page and download the latest APK.
 
 ---
 
