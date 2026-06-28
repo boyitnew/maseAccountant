@@ -28,8 +28,8 @@ object SmsParser {
 
     private fun normalizeDigits(text: String): String {
         return text
-            .replace(Regex("[۰-۹]")) { c -> '0' + (c.value[0] - '۰') }
-            .replace(Regex("[٠-٩]")) { c -> '0' + (c.value[0] - '٠') }
+            .replace(Regex("[۰-۹]")) { c -> ('0' + (c.value[0] - '۰')).toString() }
+            .replace(Regex("[٠-٩]")) { c -> ('0' + (c.value[0] - '٠')).toString() }
             .replace(",", "")
             .trim()
     }
