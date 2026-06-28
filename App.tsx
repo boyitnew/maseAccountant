@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, StatusBar, I18nManager } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, ActivityIndicator, StyleSheet, StatusBar, I18nManager, AppState } from 'react-native';
 
 I18nManager.allowRTL(true);
 I18nManager.forceRTL(true);
@@ -21,22 +21,51 @@ import BottomNav from './src/components/BottomNav';
 import HomeScreen from './src/screens/HomeScreen';
 import ReportsScreen from './src/screens/ReportsScreen';
 import AddScreen from './src/screens/AddScreen';
+import TransferScreen from './src/screens/TransferScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import RemindersScreen from './src/screens/RemindersScreen';
 import AccountsScreen from './src/screens/AccountsScreen';
 import LockScreen from './src/screens/LockScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
+import { getPendingSms } from './src/services/SmsBridge';
 
-type ViewName = 'home' | 'accounts' | 'reports' | 'add' | 'settings' | 'reminders';
+type ViewName = 'home' | 'accounts' | 'reports' | 'add' | 'transfer' | 'settings' | 'reminders';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<ViewName>('home');
+  const [smsData, setSmsData] = useState<{ amount: number; type: 'income' | 'expense'; bankName: string; cardSuffix: string } | null>(null);
   const { isLoaded, appLock, userProfile } = useFinance();
   const [userUnlocked, setUserUnlocked] = useState(false);
   const [isOnboarded, setIsOnboarded] = useState(false);
   const isUnlocked = !appLock.enabled || userUnlocked;
 
   const needsOnboarding = !isOnboarded && userProfile.name === 'کاربر' && !userProfile.phone && !userProfile.email;
+
+  useEffect(() => {
+    const checkSms = async () => {
+      const pending = await getPendingSms();
+      if (pending) {
+        setSmsData({
+          amount: pending.data.amount,
+          type: pending.data.type,
+          bankName: pending.data.bankName,
+          cardSuffix: pending.data.cardSuffix,
+        });
+        setCurrentView('add');
+      }
+    };
+    checkSms();
+
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') checkSms();
+    });
+    return () => sub.remove();
+  }, []);
+
+  const openAddScreen = useCallback(() => {
+    setSmsData(null);
+    setCurrentView('add');
+  }, []);
 
   if (!isLoaded) {
     return (
@@ -58,19 +87,20 @@ function AppContent() {
   return (
     <View style={styles.appContainer}>
       <View style={styles.contentArea}>
-        {currentView === 'home' && <HomeScreen onEdit={() => setCurrentView('add')} />}
+        {currentView === 'home' && <HomeScreen onEdit={openAddScreen} />}
         {currentView === 'accounts' && <AccountsScreen />}
         {currentView === 'reports' && <ReportsScreen />}
+        {currentView === 'transfer' && <TransferScreen onClose={() => setCurrentView('home')} />}
         {currentView === 'settings' && <SettingsScreen />}
         {currentView === 'reminders' && <RemindersScreen />}
       </View>
 
       {currentView === 'add' && (
-        <AddScreen onClose={() => setCurrentView('home')} />
+        <AddScreen onClose={() => { setSmsData(null); setCurrentView('home'); }} initialSmsData={smsData} />
       )}
 
-      {currentView !== 'add' && (
-        <BottomNav currentView={currentView} onChange={setCurrentView} />
+      {currentView !== 'add' && currentView !== 'transfer' && (
+        <BottomNav currentView={currentView} onChange={setCurrentView} onTransfer={() => setCurrentView('transfer')} />
       )}
     </View>
   );

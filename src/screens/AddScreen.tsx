@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert,
+  View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert, Image,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { useFinance } from '../context/FinanceContext';
 import { TransactionType } from '../types';
@@ -13,14 +14,15 @@ import ShamsiDatePicker from '../components/ShamsiDatePicker';
 const iconMap: Record<string, any> = {
   'credit-card': 'credit-card', monitor: 'monitor', gift: 'gift', coffee: 'coffee',
   truck: 'truck', 'shopping-bag': 'shopping-bag', home: 'home', 'file-text': 'file-text',
-  film: 'film', activity: 'activity', zap: 'zap',
+  film: 'film', activity: 'activity', zap: 'zap', repeat: 'repeat',
 };
 
 interface AddScreenProps {
   onClose: () => void;
+  initialSmsData?: { amount: number; type: TransactionType; bankName: string; cardSuffix: string } | null;
 }
 
-export default function AddScreen({ onClose }: AddScreenProps) {
+export default function AddScreen({ onClose, initialSmsData }: AddScreenProps) {
   const { addTransaction, updateTransaction, transactions, editingTransactionId, setEditingTransactionId, categories, accounts, addRecurring } = useFinance();
 
   const editingTx = editingTransactionId ? transactions.find(t => t.id === editingTransactionId) : null;
@@ -38,8 +40,19 @@ export default function AddScreen({ onClose }: AddScreenProps) {
   const [intervalValue, setIntervalValue] = useState('1');
 
   const initialDate = editingTx ? new Date(editingTx.date) : new Date();
+  const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [txDate, setTxDate] = useState<Date>(initialDate);
   const [showDatePicker, setShowDatePicker] = useState(false);
+
+  useEffect(() => {
+    if (initialSmsData) {
+      setAmount(String(initialSmsData.amount));
+      setType(initialSmsData.type);
+      setNote(`${initialSmsData.bankName}${initialSmsData.cardSuffix ? ` - کارت ${initialSmsData.cardSuffix}` : ''}`);
+      const valid = categories.filter(c => c.type === initialSmsData.type);
+      if (valid.length > 0) setCategoryId(valid[0].id);
+    }
+  }, [initialSmsData]);
 
   useEffect(() => {
     if (editingTx) {
@@ -71,6 +84,37 @@ export default function AddScreen({ onClose }: AddScreenProps) {
     } catch {
       Alert.alert('خطا', 'دسترسی به کلیپ‌بورد امکان‌پذیر نیست.');
       setShowSmsArea(true);
+    }
+  };
+
+  const pickReceipt = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('دسترسی', 'لطفاً دسترسی به گالری را فعال کنید.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+      allowsEditing: true,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setReceiptUri(result.assets[0].uri);
+    }
+  };
+
+  const takePhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('دسترسی', 'لطفاً دسترسی به دوربین را فعال کنید.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.7,
+      allowsEditing: true,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setReceiptUri(result.assets[0].uri);
     }
   };
 
@@ -260,6 +304,30 @@ export default function AddScreen({ onClose }: AddScreenProps) {
             <TextInput style={styles.noteInput} value={note} onChangeText={setNote} placeholder="مثلاً: خرید از فروشگاه رفاه..." />
           </View>
 
+          <View style={styles.receiptSection}>
+            <Text style={styles.sectionLabel}>رسید / عکس</Text>
+            <View style={styles.receiptRow}>
+              <TouchableOpacity style={styles.receiptBtn} onPress={pickReceipt}>
+                <Feather name="image" size={20} color="#4f46e5" />
+                <Text style={styles.receiptBtnText}>از گالری</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.receiptBtn} onPress={takePhoto}>
+                <Feather name="camera" size={20} color="#4f46e5" />
+                <Text style={styles.receiptBtnText}>دوربین</Text>
+              </TouchableOpacity>
+              {receiptUri && (
+                <TouchableOpacity style={styles.receiptRemoveBtn} onPress={() => setReceiptUri(null)}>
+                  <Feather name="trash-2" size={18} color="#ef4444" />
+                </TouchableOpacity>
+              )}
+            </View>
+            {receiptUri && (
+              <View style={styles.receiptPreview}>
+                <Image source={{ uri: receiptUri }} style={styles.receiptImage} />
+              </View>
+            )}
+          </View>
+
           {!editingTx && (
             <View style={styles.recurringSection}>
               <TouchableOpacity style={styles.recurringToggle} onPress={() => setIsRecurring(!isRecurring)}>
@@ -370,6 +438,14 @@ const styles = StyleSheet.create({
 
   noteSection: { gap: 8},
   noteInput: { backgroundColor: '#fff', borderRadius: 16, padding: 16, fontSize: 14, borderWidth: 1, borderColor: '#e5e7eb'},
+
+  receiptSection: { gap: 8 },
+  receiptRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  receiptBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#eef2ff', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#e0e7ff' },
+  receiptBtnText: { fontSize: 12, fontFamily: 'Vazirmatn_600SemiBold', color: '#4f46e5' },
+  receiptRemoveBtn: { padding: 8 },
+  receiptPreview: { marginTop: 4, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#e5e7eb' },
+  receiptImage: { width: '100%', height: 200, resizeMode: 'cover' },
 
   dateField: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
   dateFieldText: { flex: 1, fontSize: 16, color: '#1f2937', textAlign: 'center' },

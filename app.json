@@ -2,7 +2,7 @@
   "expo": {
     "name": "حسابدار شخصی من",
     "slug": "my-accountant",
-    "version": "1.5.1",
+    "version": "1.6.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.myaccountant.app",
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#4f46e5"

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, Modal, Pressable,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, Modal, Pressable, TextInput,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFinance } from '../context/FinanceContext';
@@ -33,6 +33,7 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [budgetDetail, setBudgetDetail] = useState<{ id: string; name: string; color: string } | null>(null);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const calendarDays = useMemo(() => generateLast14Days(), []);
   const categoryExpenses = useMemo(() => {
     const now = new Date();
@@ -89,9 +90,21 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
   }, [transactions, selectedDate]);
 
   const displayTransactions = useMemo(() => {
-    if (!selectedDate) return transactions;
-    return transactions.filter(tx => isSameDay(new Date(tx.date), selectedDate));
-  }, [selectedDate, transactions]);
+    let filtered = transactions;
+    if (selectedDate) {
+      filtered = filtered.filter(tx => isSameDay(new Date(tx.date), selectedDate));
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter(tx => {
+        const cat = categories.find(c => c.id === tx.categoryId);
+        return tx.note.toLowerCase().includes(q) ||
+          String(tx.amount).includes(q) ||
+          (cat?.name.toLowerCase().includes(q) ?? false);
+      });
+    }
+    return filtered;
+  }, [selectedDate, transactions, searchQuery, categories]);
 
   const isToday = isSameDay(selectedDate, new Date());
   const selectedDateFull = selectedDate ? getPersianDate(selectedDate).full : '';
@@ -342,6 +355,17 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
           <Text style={styles.transactionsDate}>{isToday ? 'امروز' : selectedDateFull}</Text>
         </View>
 
+        <View style={styles.searchBar}>
+          <Feather name="search" size={16} color="#9ca3af" />
+          <TextInput style={styles.searchInput} value={searchQuery} onChangeText={setSearchQuery}
+            placeholder="جستجوی تراکنش..." placeholderTextColor="#9ca3af" />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Feather name="x" size={18} color="#9ca3af" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
         {displayTransactions.length === 0 ? (
           <View style={styles.emptyState}>
             <Feather name="file-text" size={24} color="#d1d5db" />
@@ -532,6 +556,9 @@ const styles = StyleSheet.create({
 
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40, backgroundColor: '#fff', borderRadius: 24, borderWidth: 1, borderStyle: 'dashed', borderColor: '#e5e7eb', gap: 12},
   emptyText: { fontSize: 14, fontFamily: 'Vazirmatn_500Medium', color: '#9ca3af' },
+
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: '#e5e7eb', marginBottom: 12 },
+  searchInput: { flex: 1, fontSize: 14, fontFamily: 'Vazirmatn_400Regular', color: '#1f2937', height: 20, padding: 0 },
 
   txCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1}, shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
   txRow: { flexDirection: 'row', alignItems: 'center', gap: 16},

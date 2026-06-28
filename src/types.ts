@@ -133,6 +133,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'salary', name: 'حقوق و دستمزد', icon: 'credit-card', color: '#10b981', type: 'income' },
   { id: 'freelance', name: 'پروژه آزاد', icon: 'monitor', color: '#14b8a6', type: 'income' },
   { id: 'gift_in', name: 'هدیه دریافتی', icon: 'gift', color: '#22c55e', type: 'income' },
+  { id: 'transfer_in', name: 'انتقال وجه (دریافتی)', icon: 'repeat', color: '#0ea5e9', type: 'income' },
   { id: 'food', name: 'رستوران و خوراک', icon: 'coffee', color: '#f43f5e', type: 'expense', parentCategoryId: 'essentials' },
   { id: 'transport', name: 'اسنپ و رفت‌وآمد', icon: 'truck', color: '#f97316', type: 'expense', parentCategoryId: 'essentials' },
   { id: 'shopping', name: 'خرید لباس و ...', icon: 'shopping-bag', color: '#d946ef', type: 'expense', parentCategoryId: 'essentials' },
@@ -142,6 +143,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'health', name: 'دارو و درمان', icon: 'activity', color: '#ef4444', type: 'expense', parentCategoryId: 'essentials' },
   { id: 'education', name: 'آموزش و کتاب', icon: 'book', color: '#8b5cf6', type: 'expense', parentCategoryId: 'essentials' },
   { id: 'investment', name: 'سرمایه‌گذاری', icon: 'trending-up', color: '#059669', type: 'expense', parentCategoryId: 'savings_investments' },
+  { id: 'transfer', name: 'انتقال وجه', icon: 'repeat', color: '#0ea5e9', type: 'expense', parentCategoryId: 'savings_investments' },
 ];
 
 export const CATEGORY_ICONS = [
