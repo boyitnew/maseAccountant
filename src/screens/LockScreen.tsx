@@ -34,7 +34,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   }, [error]);
 
   useEffect(() => {
-    if (mode === 'enter' && pin.length >= 4) {
+    if (mode === 'enter' && pin.length >= 4 && pin.length === appLock.pin.length) {
       if (pin === appLock.pin) {
         onUnlock();
       } else {
@@ -52,7 +52,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   }, [pin, mode]);
 
   useEffect(() => {
-    if (mode === 'confirm' && confirmPin.length >= 4) {
+    if (mode === 'confirm' && confirmPin.length >= 4 && confirmPin.length === pin.length) {
       if (pin === confirmPin) {
         setAppLock({ ...appLock, pin, enabled: true });
         onUnlock();
