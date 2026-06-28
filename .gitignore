@@ -3,6 +3,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 *.jks
+*.keystore
 *.p8
 *.p12
 *.key

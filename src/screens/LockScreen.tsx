@@ -33,6 +33,38 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     }
   }, [error]);
 
+  useEffect(() => {
+    if (mode === 'enter' && pin.length >= 4) {
+      if (pin === appLock.pin) {
+        onUnlock();
+      } else {
+        setError('PIN اشتباه است');
+        setPin('');
+      }
+    }
+  }, [pin, mode]);
+
+  useEffect(() => {
+    if (mode === 'create' && pin.length >= 4) {
+      setMode('confirm');
+      setError('');
+    }
+  }, [pin, mode]);
+
+  useEffect(() => {
+    if (mode === 'confirm' && confirmPin.length >= 4) {
+      if (pin === confirmPin) {
+        setAppLock({ ...appLock, pin, enabled: true });
+        onUnlock();
+      } else {
+        setError('PINها مطابقت ندارند');
+        setConfirmPin('');
+        setMode('create');
+        setPin('');
+      }
+    }
+  }, [confirmPin, mode]);
+
   const initLock = async () => {
     if (!appLock.enabled) {
       if (!appLock.pin) {
