@@ -25,14 +25,18 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import RemindersScreen from './src/screens/RemindersScreen';
 import AccountsScreen from './src/screens/AccountsScreen';
 import LockScreen from './src/screens/LockScreen';
+import OnboardingScreen from './src/screens/OnboardingScreen';
 
 type ViewName = 'home' | 'accounts' | 'reports' | 'add' | 'settings' | 'reminders';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<ViewName>('home');
-  const { isLoaded, appLock } = useFinance();
+  const { isLoaded, appLock, userProfile } = useFinance();
   const [userUnlocked, setUserUnlocked] = useState(false);
+  const [isOnboarded, setIsOnboarded] = useState(false);
   const isUnlocked = !appLock.enabled || userUnlocked;
+
+  const needsOnboarding = !isOnboarded && userProfile.name === 'کاربر' && !userProfile.phone && !userProfile.email;
 
   if (!isLoaded) {
     return (
@@ -41,6 +45,10 @@ function AppContent() {
         <Text style={styles.loadingText}>در حال بارگذاری...</Text>
       </View>
     );
+  }
+
+  if (needsOnboarding) {
+    return <OnboardingScreen onDone={() => setIsOnboarded(true)} />;
   }
 
   if (!isUnlocked) {

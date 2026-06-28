@@ -208,8 +208,9 @@ export default function AddScreen({ onClose }: AddScreenProps) {
           <CurrencyInput value={amount} onChangeAmount={setAmount} label="مبلغ (تومان)"
             placeholder="0" autoFocus
             inputStyle={{ fontSize: 48, textAlign: 'center', color: type === 'expense' ? '#f43f5e' : '#10b981' }}
-            containerStyle={{ alignItems: 'center' }}
-            suffixStyle={{ fontSize: 16 }} />
+            containerStyle={{ alignItems: 'center', marginBottom: 8 }}
+            wrapperStyle={{ borderWidth: 0, backgroundColor: 'transparent', height: 64 }}
+            suffixStyle={{ fontSize: 18, color: '#9ca3af' }} />
 
           {accounts.length > 1 && (
             <View style={styles.accountSection}>

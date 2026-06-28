@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, Modal,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, Modal, Pressable,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFinance } from '../context/FinanceContext';
 import { formatCurrency, formatDate, getPersianDate, isSameDay, generateLast14Days,
-  gregorianToShamsi, SHAMSI_MONTH_NAMES, calculateGoalProgress } from '../utils';
+  gregorianToShamsi, SHAMSI_MONTH_NAMES, calculateGoalProgress, formatShamsiDate } from '../utils';
 import { PARENT_CATEGORIES, Reminder, SavingsGoal } from '../types';
+import ShamsiDatePicker from '../components/ShamsiDatePicker';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CONTENT_PADDING = 24;
@@ -31,9 +32,8 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [budgetDetail, setBudgetDetail] = useState<{ id: string; name: string; color: string } | null>(null);
+  const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const calendarDays = useMemo(() => generateLast14Days(), []);
-  const [showAllAccounts, setShowAllAccounts] = useState(false);
-
   const categoryExpenses = useMemo(() => {
     const now = new Date();
     const exps: Record<string, number> = {};
@@ -187,12 +187,9 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
           <Feather name="layers" size={16} color="#2563eb" />
           <Text style={styles.sectionTitle}>حساب‌ها</Text>
         </View>
-        <TouchableOpacity onPress={() => setShowAllAccounts(!showAllAccounts)}>
-          <Text style={styles.seeAll}>{showAllAccounts ? 'کمتر' : 'همه'}</Text>
-        </TouchableOpacity>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.accountsStrip}>
-        {(showAllAccounts ? accountSummaries : accountSummaries.slice(0, 3)).map(a => (
+        {accountSummaries.slice(0, 5).map(a => (
           <View key={a.id} style={[styles.accountMiniCard, { borderLeftColor: a.color, borderLeftWidth: 3 }]}>
             <Text style={styles.accountMiniName} numberOfLines={1}>{a.name}</Text>
             <Text style={[styles.accountMiniBalance, { color: a.balance >= 0 ? '#10b981' : '#ef4444' }]}>
@@ -232,8 +229,14 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
 
       <View style={styles.calendarSection}>
         <View style={styles.calendarHeader}>
-          <Feather name="calendar" size={16} color="#3b82f6" />
-          <Text style={styles.calendarTitle}>تقویم روزانه</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Feather name="calendar" size={16} color="#3b82f6" />
+            <Text style={styles.calendarTitle}>تقویم روزانه</Text>
+          </View>
+          <TouchableOpacity style={styles.calendarOpenBtn} onPress={() => setShowCalendarPicker(true)} activeOpacity={0.7}>
+            <Feather name="chevron-down" size={16} color="#3b82f6" />
+            <Text style={styles.calendarOpenText}>{formatShamsiDate(selectedDate)}</Text>
+          </TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.calendarStrip}>
           {calendarDays.map((date, i) => {
@@ -241,15 +244,15 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
             const t = isSameDay(date, new Date());
             const pd = getPersianDate(date);
             return (
-              <TouchableOpacity key={i} style={[styles.calendarItem, s && styles.calendarItemActive]}
-                onPress={() => setSelectedDate(date)} activeOpacity={0.7}>
+              <Pressable key={i} style={[styles.calendarItem, s && styles.calendarItemActive]}
+                onPress={() => setSelectedDate(date)}>
                 <Text style={[styles.calendarDayName, s && styles.calendarTextActive]}>
                   {t ? 'امروز' : pd.dayName}
                 </Text>
                 <Text style={[styles.calendarDayNum, s && styles.calendarTextActive]}>
                   {pd.dayNum}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </ScrollView>
@@ -387,6 +390,10 @@ export default function HomeScreen({ onEdit }: HomeScreenProps) {
       </View>
     </ScrollView>
 
+      <ShamsiDatePicker visible={showCalendarPicker} date={selectedDate}
+        onConfirm={(d) => { setSelectedDate(d); setShowCalendarPicker(false); }}
+        onCancel={() => setShowCalendarPicker(false)} />
+
       <Modal visible={!!budgetDetail} transparent animationType="slide">
         <View style={styles.bdOverlay}>
           <View style={styles.bdContainer}>
@@ -502,8 +509,10 @@ const styles = StyleSheet.create({
   budgetSummaryStat: { fontSize: 10, color: '#9ca3af', fontFamily: 'Vazirmatn_500Medium' },
 
   calendarSection: { marginBottom: 24},
-  calendarHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12},
+  calendarHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12},
   calendarTitle: { fontSize: 14, fontFamily: 'Vazirmatn_700Bold', color: '#1f2937' },
+  calendarOpenBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eff6ff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: '#bfdbfe' },
+  calendarOpenText: { fontSize: 12, fontFamily: 'Vazirmatn_700Bold', color: '#2563eb' },
   calendarStrip: { gap: 12, paddingBottom: 4},
   calendarItem: { width: CALENDAR_ITEM_WIDTH, height: 64, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#f3f4f6', shadowColor: '#000', shadowOffset: { width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
   calendarItemActive: { backgroundColor: '#2563eb', borderColor: 'transparent', transform: [{ scale: 1.05}] },

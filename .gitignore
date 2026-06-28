@@ -13,3 +13,7 @@ web-build/
 .env.local
 android/build.log
 android/build.pid
+android/build*.log
+android/build*.ps1
+android/build.bat
+android/build_final.log

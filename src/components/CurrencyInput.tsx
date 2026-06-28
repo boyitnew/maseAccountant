@@ -9,6 +9,7 @@ interface CurrencyInputProps extends Omit<TextInputProps, 'value' | 'onChangeTex
   containerStyle?: ViewStyle;
   inputStyle?: TextStyle;
   suffixStyle?: TextStyle;
+  wrapperStyle?: ViewStyle;
 }
 
 export function formatWithSeparator(raw: string): string {
@@ -21,7 +22,7 @@ export function cleanSeparators(formatted: string): string {
   return formatted.replace(/,/g, '');
 }
 
-export default function CurrencyInput({ value, onChangeAmount, label, placeholder, style, containerStyle, inputStyle, suffixStyle, ...rest }: CurrencyInputProps) {
+export default function CurrencyInput({ value, onChangeAmount, label, placeholder, style, containerStyle, inputStyle, suffixStyle, wrapperStyle, ...rest }: CurrencyInputProps) {
   const displayValue = value ? formatWithSeparator(value) : '';
 
   const handleChange = (text: string) => {
@@ -32,7 +33,7 @@ export default function CurrencyInput({ value, onChangeAmount, label, placeholde
   return (
     <View style={[styles.container, containerStyle]}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      <View style={styles.inputWrapper}>
+      <View style={[styles.inputWrapper, wrapperStyle]}>
         <TextInput
           style={[styles.input, style, inputStyle]}
           value={displayValue}
