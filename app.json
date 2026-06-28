@@ -2,7 +2,7 @@
   "expo": {
     "name": "حسابدار شخصی من",
     "slug": "my-accountant",
-    "version": "1.6.0",
+    "version": "1.7.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,

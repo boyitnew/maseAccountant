@@ -91,7 +91,7 @@ function AppContent() {
         {currentView === 'accounts' && <AccountsScreen />}
         {currentView === 'reports' && <ReportsScreen />}
         {currentView === 'transfer' && <TransferScreen onClose={() => setCurrentView('home')} />}
-        {currentView === 'settings' && <SettingsScreen />}
+        {currentView === 'settings' && <SettingsScreen onNavigateTo={(view) => setCurrentView(view as ViewName)} />}
         {currentView === 'reminders' && <RemindersScreen />}
       </View>
 
